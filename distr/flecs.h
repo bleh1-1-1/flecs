@@ -1,5 +1,5 @@
 // Comment out this line when using as DLL
-#define flecs_STATIC
+//#define flecs_STATIC
 /**
  * @file flecs.h
  * @brief Flecs public API.
@@ -21865,6 +21865,97 @@ inline uint32_t get_generation(flecs::entity_t e) {
 
 struct scoped_world;
 
+
+// Concepts to constrain and optimize template instantiation
+template<typename T>
+concept IsFlecsSingleton = requires { 
+    typename T::type;
+    T::is_singleton; 
+    T::is_optional;
+	T::is_parent;
+} && T::is_singleton;
+
+template<typename T>
+concept IsFlecsOptional = requires { 
+    typename T::type;
+    T::is_singleton; 
+    T::is_optional;
+	T::is_parent;
+} && T::is_optional;
+
+template<typename T>
+concept IsFlecsParent = requires { 
+    typename T::type;
+    T::is_singleton; 
+    T::is_optional;
+	T::is_parent;
+} && T::is_parent;
+
+
+template<typename T>
+concept IsFlecsWrapper = requires {
+    typename T::type;
+    T::is_singleton;
+    T::is_optional;
+	T::is_parent;
+} && (T::is_singleton || T::is_optional || T::is_parent);
+
+template<typename T>
+concept IsPlainComponent = !IsFlecsWrapper<T>;
+
+// Lightweight wrapper types
+template<typename T>
+struct singleton_t {
+    using type = T;
+    static constexpr bool is_singleton = true;
+    static constexpr bool is_optional = false;
+	static constexpr bool is_parent = false;
+};
+
+template<typename T>
+struct optional_t {
+    using type = T;
+    static constexpr bool is_singleton = false;
+    static constexpr bool is_optional = true;
+	static constexpr bool is_parent = false;
+};
+
+template<typename T>
+struct singleton_optional_t {
+    using type = T;
+    static constexpr bool is_singleton = true;
+    static constexpr bool is_optional = true;
+	static constexpr bool is_parent = false;
+};
+
+template<typename T>
+struct parent_t {
+    using type = T;
+    static constexpr bool is_singleton = false;
+    static constexpr bool is_optional = false;
+	static constexpr bool is_parent = true;
+};
+template<typename T>
+struct parent_optional_t {
+    using type = T;
+    static constexpr bool is_singleton = false;
+    static constexpr bool is_optional = true;
+	static constexpr bool is_parent = true;
+};
+
+// Only unwrap our specific wrapper types
+template<typename T>
+constexpr auto unwrap_type() {
+    if constexpr (IsFlecsWrapper<T>) {
+        return static_cast<typename T::type*>(nullptr);
+    } else {
+        return static_cast<T*>(nullptr);
+    }
+}
+
+template<typename T>
+using unwrap_type_t = std::remove_pointer_t<decltype(unwrap_type<T>())>;
+
 /**
  * @defgroup cpp_world World
  * @ingroup cpp_core
@@ -23407,8 +23498,7 @@ flecs::system system(flecs::entity e) const;
  * @return System builder.
  */
 template <typename... Components, typename... Args>
-flecs::system_builder<Components...> system(Args &&... args) const;
-
+flecs::system_builder<unwrap_type_t<Components>...> system(Args &&... args) const;
 /** @} */
 
 #   endif
@@ -31109,6 +31199,44 @@ struct query_builder_i : term_builder_i<Base> {
 
     /* With methods */
 
+	template<typename T>
+    Base& with_singleton() {
+        this->term();
+        *this->term_ = flecs::term(_::type<T>::id(this->world_v()));
+        this->term_->inout = static_cast<ecs_inout_kind_t>(
+            _::type_to_inout<T>());
+        
+        flecs::id_t sid = this->term_->id;
+        if (!sid) {
+            sid = this->term_->first.id;
+        }
+
+        ecs_assert(sid != 0, ECS_INVALID_PARAMETER, NULL);
+
+        if (!ECS_IS_PAIR(sid)) {
+            this->term_->src.id = sid;
+        } else {
+           this->term_->src.id = ecs_pair_first(this->world_v(), sid);
+        }
+        return *this;
+    }
+
+    template <typename T>
+    Base& without_singleton() {
+		this->with<T>().not_();
+		flecs::id_t sid = this->term_->id;
+        if (!sid) {
+            sid = this->term_->first.id;
+        }
+        ecs_assert(sid != 0, ECS_INVALID_PARAMETER, NULL);
+        if (!ECS_IS_PAIR(sid)) {
+            this->term_->src.id = sid;
+        } else {
+           this->term_->src.id = ecs_pair_first(this->world_v(), sid);
+        }
+        return *this;
+    }
+
     template<typename T>
     Base& with() {
         this->term();
@@ -31187,6 +31315,25 @@ struct query_builder_i : term_builder_i<Base> {
         *this->term_ = term;
         return *this;
     }
+	
+	template <typename T>
+    Base& term_singleton() {
+        flecs::id_t term_id = _::type<T>::id(this->world_v());
+        for (int i = 0; i < term_index_; i ++) {
+            ecs_term_t& cur_term = desc_->terms[i];
+            ecs_id_t cur_term_id = cur_term.id;
+            ecs_id_t cur_term_pair = ecs_pair(cur_term.first.id, cur_term.second.id);
+
+            if ((term_id == cur_term_id || (cur_term_id != 0 && term_id == ecs_get_typeid(this->world_v(), cur_term_id))) ||
+                (term_id == cur_term_pair || (cur_term_pair != 0 && term_id == ecs_get_typeid(this->world_v(), cur_term_pair)))) {
+                return term_at(i).singleton();
+            }
+        }
+
+		assert(false && "");
+        ecs_err("term not found");
+        return *this;
+    }
 
     /* Without methods, shorthand for .with(...).not_(). */
 
@@ -31256,9 +31403,7 @@ struct query_builder_i : term_builder_i<Base> {
         return this->with(flecs::ScopeClose).entity(0);
     }
 
-    /* Term notation for more complex query features */
-
-    /** Sets the current term to next one in term list.
+	/** Sets the current term to the one at the provided index.
      */
     Base& term() {
         if (this->term_) {
@@ -32708,8 +32853,26 @@ inline system world::system(flecs::entity e) const {
 }
 
 template <typename... Comps, typename... Args>
-inline system_builder<Comps...> world::system(Args &&... args) const {
-    return flecs::system_builder<Comps...>(world_, FLECS_FWD(args)...);
+inline flecs::system_builder<unwrap_type_t<Comps>...> world::system(Args &&... args) const {
+	auto builder = flecs::system_builder<unwrap_type_t<Comps>...>(world_, FLECS_FWD(args)...);
+	std::size_t term_index = 0;
+
+	auto configure_one = [&term_index, &builder](auto* component_type) {
+    	using T = std::remove_pointer_t<decltype(component_type)>;
+   		if constexpr (IsFlecsSingleton<T>) {
+   		    builder.term_at(term_index).singleton();
+   		}
+   		if constexpr (IsFlecsOptional<T>) {
+   		    builder.term_at(term_index).optional();
+   		}
+   		if constexpr (IsFlecsParent<T>) {
+   		    builder.term_at(term_index).parent();
+   		}
+   		term_index++;
+	};
+
+	(configure_one(static_cast<Comps*>(nullptr)), ...);
+	return builder;
 }
 
 namespace _ {
