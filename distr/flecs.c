@@ -3267,8 +3267,6 @@ typedef struct ecs_world_allocators_t {
     ecs_map_params_t ptr;
     ecs_map_params_t query_table_list;
     ecs_block_allocator_t query_table;
-    ecs_block_allocator_t query_table_match;
-    ecs_block_allocator_t query_triv_table_match;
     ecs_block_allocator_t graph_edge_lo;
     ecs_block_allocator_t graph_edge;
     ecs_block_allocator_t id_record;
@@ -18840,18 +18838,14 @@ void ecs_set_hooks_id(
     }
 
     /* Set default copy ctor, move ctor and merge */
-    if (!h->copy_ctor) {
-        if(flags & ECS_TYPE_HOOK_COPY_ILLEGAL || flags & ECS_TYPE_HOOK_CTOR_ILLEGAL) {
-            flags |= ECS_TYPE_HOOK_COPY_CTOR_ILLEGAL;
-        } else if(h->copy) {
+    if (!h->copy_ctor && !(flags & ECS_TYPE_HOOK_COPY_CTOR_ILLEGAL)) {
+        if (h->copy) {
             ti->hooks.copy_ctor = flecs_default_copy_ctor;
         }
     }
 
-    if (!h->move_ctor) {
-        if(flags & ECS_TYPE_HOOK_MOVE_ILLEGAL || flags & ECS_TYPE_HOOK_CTOR_ILLEGAL) {
-            flags |= ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL;
-        } else if (h->move) {
+    if (!h->move_ctor && !(flags & ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL)) {
+        if (h->move) {
             ti->hooks.move_ctor = flecs_default_move_ctor;
         }
     }
@@ -20121,8 +20115,6 @@ void flecs_world_allocators_init(
     ecs_map_params_init(&a->query_table_list, &world->allocator);
 
     flecs_ballocator_init_t(&a->query_table, ecs_query_cache_table_t);
-    flecs_ballocator_init_t(&a->query_table_match, ecs_query_cache_match_t);
-    flecs_ballocator_init_t(&a->query_triv_table_match, ecs_query_triv_cache_match_t);
     flecs_ballocator_init_n(&a->graph_edge_lo, ecs_graph_edge_t, FLECS_HI_COMPONENT_ID);
     flecs_ballocator_init_t(&a->graph_edge, ecs_graph_edge_t);
     flecs_ballocator_init_t(&a->id_record, ecs_component_record_t);
@@ -20143,8 +20135,6 @@ void flecs_world_allocators_fini(
     ecs_map_params_fini(&a->ptr);
     ecs_map_params_fini(&a->query_table_list);
     flecs_ballocator_fini(&a->query_table);
-    flecs_ballocator_fini(&a->query_table_match);
-    flecs_ballocator_fini(&a->query_triv_table_match);
     flecs_ballocator_fini(&a->graph_edge_lo);
     flecs_ballocator_fini(&a->graph_edge);
     flecs_ballocator_fini(&a->id_record);
@@ -28592,7 +28582,7 @@ void ecs_system_activate(
     const ecs_system_t *system_data);
 
 /* Internal function to run a system */
-ecs_entity_t flecs_run_intern(
+ecs_entity_t flecs_run_system(
     ecs_world_t *world,
     ecs_stage_t *stage,
     ecs_entity_t system,
@@ -58325,7 +58315,7 @@ static void flecs_pipeline_free(
         ecs_world_t *world = p->query->world;
         ecs_allocator_t *a = &world->allocator;
         ecs_vec_fini_t(a, &p->ops, ecs_pipeline_op_t);
-        ecs_vec_fini_t(a, &p->systems, ecs_entity_t);
+        ecs_vec_fini_t(a, &p->systems, ecs_system_t*);
         ecs_os_free(p->iters);
         ecs_query_fini(p->query);
         ecs_os_free(p);
@@ -58584,7 +58574,7 @@ bool flecs_pipeline_build(
     ecs_map_init(&ws.wildcard_ids, a);
 
     ecs_vec_reset_t(a, &pq->ops, ecs_pipeline_op_t);
-    ecs_vec_reset_t(a, &pq->systems, ecs_entity_t);
+    ecs_vec_reset_t(a, &pq->systems, ecs_system_t*);
 
     bool multi_threaded = false;
     bool immediate = false;
@@ -58667,8 +58657,7 @@ bool flecs_pipeline_build(
             /* Don't increase count for inactive systems, as they are ignored by
              * the query used to run the pipeline. */
             if (is_active) {
-                ecs_vec_append_t(a, &pq->systems, ecs_entity_t)[0] = 
-                    it.entities[i];
+                ecs_vec_append_t(a, &pq->systems, ecs_system_t*)[0] = sys;
                 if (!op->count) {
                     op->multi_threaded = multi_threaded;
                     op->immediate = immediate;
@@ -58701,12 +58690,12 @@ bool flecs_pipeline_build(
 
         int32_t i, count = ecs_vec_count(&pq->systems);
         int32_t op_index = 0, ran_since_merge = 0;
-        ecs_entity_t *systems = ecs_vec_first_t(&pq->systems, ecs_entity_t);
+        ecs_system_t **systems = ecs_vec_first_t(&pq->systems, ecs_system_t*);
         for (i = 0; i < count; i ++) {
-            ecs_entity_t system = systems[i];
-            const EcsPoly *poly = ecs_get_pair(world, system, EcsPoly, EcsSystem);
-            flecs_poly_assert(poly->poly, ecs_system_t);
-            ecs_system_t *sys = (ecs_system_t*)poly->poly;
+            ecs_system_t *sys = systems[i];
+            ecs_entity_t system = sys->query->entity;
+            ecs_assert(system != 0, ECS_INTERNAL_ERROR, NULL);
+            (void)system;
 
 #ifdef FLECS_LOG_1
             char *path = ecs_get_path(world, system);
@@ -58859,14 +58848,11 @@ int32_t flecs_run_pipeline_ops(
     ecs_assert(!stage_index || op->multi_threaded, ECS_INTERNAL_ERROR, NULL);
 
     int32_t count = ecs_vec_count(&pq->systems);
-    ecs_entity_t* systems = ecs_vec_first_t(&pq->systems, ecs_entity_t);
+    ecs_system_t **systems = ecs_vec_first_t(&pq->systems, ecs_system_t*);
     int32_t ran_since_merge = i - op->offset;
 
     for (; i < count; i++) {
-        ecs_entity_t system = systems[i];
-        const EcsPoly* poly = ecs_get_pair(world, system, EcsPoly, EcsSystem);
-        flecs_poly_assert(poly->poly, ecs_system_t);
-        ecs_system_t* sys = (ecs_system_t*)poly->poly;
+        ecs_system_t* sys = systems[i];
 
         /* Keep track of the last frame for which the system has ran, so we
          * know from where to resume the schedule in case the schedule
@@ -58882,7 +58868,7 @@ int32_t flecs_run_pipeline_ops(
             s = stage;
         }
 
-        flecs_run_intern(world, s, system, sys, stage_index,
+        flecs_run_system(world, s, sys->query->entity, sys, stage_index,
             stage_count, delta_time, NULL);
 
         ecs_os_linc(&world->info.systems_ran_frame);
@@ -58936,6 +58922,8 @@ void flecs_run_pipeline(
 
         if (!immediate) {
             ecs_readonly_begin(world, multi_threaded);
+        } else {
+            flecs_defer_begin(world, stage);
         }
 
         ECS_BIT_COND(world->flags, EcsWorldMultiThreaded, op_multi_threaded);
@@ -58979,6 +58967,8 @@ void flecs_run_pipeline(
             if (measure_time) {
                 pq->cur_op->time_spent += ecs_time_measure(&mt);
             }
+        } else {
+            flecs_defer_end(world, stage);
         }
 
         /* Store the current state of the schedule after we synchronized the
@@ -69172,15 +69162,13 @@ void FlecsWorldSummaryImport(
 ecs_mixins_t ecs_system_t_mixins = {
     .type_name = "ecs_system_t",
     .elems = {
-        [EcsMixinWorld] = offsetof(ecs_system_t, world),
-        [EcsMixinEntity] = offsetof(ecs_system_t, entity),
         [EcsMixinDtor] = offsetof(ecs_system_t, dtor)
     }
 };
 
 /* -- Public API -- */
 
-ecs_entity_t flecs_run_intern(
+ecs_entity_t flecs_run_system(
     ecs_world_t *world,
     ecs_stage_t *stage,
     ecs_entity_t system,
@@ -69254,8 +69242,6 @@ ecs_entity_t flecs_run_intern(
     qit.callback_ctx = system_data->callback_ctx;
     qit.run_ctx = system_data->run_ctx;
 
-    flecs_defer_begin(world, stage);
-
     if (stage_count > 1 && system_data->multi_threaded) {
         wit = ecs_worker_iter(it, stage_index, stage_count);
         it = &wit;
@@ -69275,13 +69261,22 @@ ecs_entity_t flecs_run_intern(
             run(it);
             ecs_iter_fini(&qit);
         } else {
+            if (it == &qit && (qit.flags & EcsIterTrivialCached)) {
+                it->next = flecs_query_trivial_cached_next;
+            }
             run(it);
         }
     } else {
         if (system_data->query->term_count) {
             if (it == &qit) {
-                while (ecs_query_next(&qit)) {
-                    action(&qit);
+                if (qit.flags & EcsIterTrivialCached) {
+                    while (flecs_query_trivial_cached_next(&qit)) {
+                        action(&qit);
+                    }
+                } else {
+                    while (ecs_query_next(&qit)) {
+                        action(&qit);
+                    }
                 }
             } else {
                 while (ecs_iter_next(it)) {
@@ -69300,12 +69295,11 @@ ecs_entity_t flecs_run_intern(
         system_data->time_spent += (ecs_ftime_t)ecs_time_measure(&time_start);
     }
 
-    flecs_defer_end(world, stage);
-
     ecs_os_perf_trace_pop(system_data->name);
 
     return it->interrupted_by;
 }
+
 
 /* -- Public API -- */
 
@@ -69320,10 +69314,12 @@ ecs_entity_t ecs_run_worker(
     ecs_stage_t *stage = flecs_stage_from_world(&world);
     ecs_system_t *system_data = flecs_poly_get(world, system, ecs_system_t);
     ecs_assert(system_data != NULL, ECS_INVALID_PARAMETER, NULL);
-
-    return flecs_run_intern(
+    flecs_defer_begin(world, stage);
+    ecs_entity_t result = flecs_run_system(
         world, stage, system, system_data, stage_index, stage_count, 
         delta_time, param);
+    flecs_defer_end(world, stage);
+    return result;
 }
 
 ecs_entity_t ecs_run(
@@ -69335,8 +69331,11 @@ ecs_entity_t ecs_run(
     ecs_stage_t *stage = flecs_stage_from_world(&world);
     ecs_system_t *system_data = flecs_poly_get(world, system, ecs_system_t);
     ecs_assert(system_data != NULL, ECS_INVALID_PARAMETER, NULL);
-    return flecs_run_intern(
+    flecs_defer_begin(world, stage);
+    ecs_entity_t result = flecs_run_system(
         world, stage, system, system_data, 0, 0, delta_time, param);
+    flecs_defer_end(world, stage);
+    return result;
 }
 
 /* System deinitialization */
@@ -69426,9 +69425,7 @@ ecs_entity_t ecs_system_init(
         ecs_assert(system != NULL, ECS_INTERNAL_ERROR, NULL);
         
         poly->poly = system;
-        system->world = world;
         system->dtor = flecs_system_poly_fini;
-        system->entity = entity;
 
         ecs_query_desc_t query_desc = desc->query;
         query_desc.entity = entity;
@@ -69443,7 +69440,6 @@ ecs_entity_t ecs_system_init(
         flecs_defer_begin(world, world->stages[0]);
 
         system->query = query;
-        system->query_entity = query->entity;
 
         system->run = desc->run;
         system->action = desc->callback;
@@ -72127,6 +72123,7 @@ void flecs_query_rematch(
     ecs_os_perf_trace_push("flecs.query.rematch");
 
     cache->monitor_generation = world->monitor_generation;
+    cache->match_count ++;
 
     world->info.rematch_count_total ++;
     int32_t rematch_count = ++ cache->rematch_count;
@@ -76980,6 +76977,43 @@ trivial_search_yield:
 
 yield:
     return true;
+}
+
+bool flecs_query_trivial_cached_next(
+    ecs_iter_t *it)
+{
+    ecs_assert(it != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_query_iter_t *qit = &it->priv_.iter.query;
+    ecs_query_impl_t *impl = ECS_CONST_CAST(ecs_query_impl_t*, it->query);
+    ecs_assert(impl != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_run_ctx_t ctx;
+    flecs_query_iter_run_ctx_init(it, &ctx);
+
+    bool redo = it->flags & EcsIterIsValid;
+    if (redo) {
+        flecs_query_self_change_detection(it, qit, impl);
+    }
+
+    it->flags &= ~(EcsIterSkip);
+    it->flags |= EcsIterIsValid;
+    it->frame_offset += it->count;
+
+    ecs_assert(it->flags & EcsIterTrivialCached, ECS_INVALID_OPERATION,
+        "query does not have trivial cache, use ecs_query_next instead");
+    ecs_assert(it->flags & EcsIterTrivialSearch, ECS_INVALID_OPERATION,
+        "iterator has constrained variables, use ecs_query_next instead");
+    ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
+
+    if (flecs_query_is_trivial_cache_search(&ctx)) {
+        return true;
+    }
+
+    it->flags |= EcsIterSkip; /* Prevent change detection on fini */
+
+    ecs_iter_fini(it);
+    return false;
 }
 
 static
