@@ -157,13 +157,49 @@ void flecs_component_sparse_remove(
     ecs_table_t *table,
     int32_t row)
 {
+    ecs_id_t id = cr->id;
+    ecs_flags32_t flags = cr->flags;
+    bool dont_fragment = flags & EcsIdDontFragment;
+
+    /* If id is a wildcard, remove entity from all matching ids. */
+    if (dont_fragment && ecs_id_is_wildcard(cr->id)) {
+        /* A wildcard by itself can't be marked sparse so must be a pair. */
+        ecs_assert(ECS_IS_PAIR(id), ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(ECS_PAIR_SECOND(id) == EcsWildcard, 
+            ECS_UNSUPPORTED,
+            "remove(*, T) not supported for DontFragment targets");
+        ecs_entity_t entity = ecs_table_entities(table)[row];
+        ecs_component_record_t *cur = cr;
+        while ((cur = flecs_component_first_next(cur))) {
+            if (flecs_component_sparse_has(cur, entity)) {
+                ecs_type_t type = {
+                    .array = &cur->id,
+                    .count = 1
+                };
+
+                flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+                    .event = EcsOnRemove,
+                    .ids = &type,
+                    .table = table,
+                    .other_table = NULL,
+                    .offset = row,
+                    .count = 1,
+                    .observable = world
+                });
+
+                flecs_component_sparse_remove(world, cur, table, row);
+            }
+        }
+
+        return;
+    }
+
     ecs_entity_t entity = 
         flecs_component_sparse_remove_intern(world, cr, table, row);
 
     if (entity) {
-        ecs_flags32_t flags = cr->flags;
-        if (flags & EcsIdDontFragment) {
-            if (ECS_IS_PAIR(cr->id)) {
+        if (dont_fragment) {
+            if (ECS_IS_PAIR(id)) {
                 if (flags & EcsIdExclusive) {
                     flecs_component_sparse_dont_fragment_exclusive_remove(
                         cr, entity);
@@ -265,14 +301,35 @@ void flecs_component_sparse_dont_fragment_exclusive_insert(
     ecs_entity_t tgt, *tgt_ptr = flecs_sparse_ensure_fast_t(
         parent->sparse, ecs_entity_t, entity);
     ecs_assert(tgt_ptr != NULL, ECS_INTERNAL_ERROR, NULL);
+
     if ((tgt = *tgt_ptr)) {
         ecs_component_record_t *other = flecs_components_get(world,
             ecs_pair(ECS_PAIR_FIRST(component_id), tgt));
         ecs_assert(other != NULL, ECS_INTERNAL_ERROR, NULL);
-        flecs_component_sparse_remove(world, other, table, row);
+        if (other != cr) {
+            ecs_type_t type = {
+                .array = &other->id,
+                .count = 1
+            };
+
+            flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+                .event = EcsOnRemove,
+                .ids = &type,
+                .table = table,
+                .other_table = NULL,
+                .offset = row,
+                .count = 1,
+                .observable = world
+            });
+
+            flecs_component_sparse_remove_intern(world, other, table, row);
+        }
     }
 
     *tgt_ptr = ECS_PAIR_SECOND(component_id);
+
+    ecs_assert(flecs_sparse_has(parent->sparse, entity), 
+        ECS_INTERNAL_ERROR, NULL);
 }
 
 void* flecs_component_sparse_insert(

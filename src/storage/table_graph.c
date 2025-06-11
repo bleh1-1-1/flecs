@@ -178,8 +178,14 @@ int flecs_type_new_filtered(
     }
 
     dst->count = w;
+
     if (w != count) {
-        dst->array = flecs_wrealloc_n(world, ecs_id_t, w, count, dst->array);
+        if (w) {
+            dst->array = flecs_wrealloc_n(world, ecs_id_t, w, count, dst->array);
+        } else {
+            flecs_wfree_n(world, ecs_id_t, count, dst->array);
+            dst->array = NULL;
+        }
     }
 
     return 0;
@@ -543,7 +549,7 @@ ecs_table_t *flecs_table_new(
     flecs_hashmap_result_t table_elem,
     ecs_table_t *prev)
 {
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     ecs_os_perf_trace_push("flecs.table.create");
 

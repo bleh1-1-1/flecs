@@ -424,6 +424,300 @@ void Sparse_remove_after_add_non_sparse_pair(void) {
     ecs_fini(world);
 }
 
+void Sparse_remove_pair_wildcard_rel(void) {
+    if (!fragment) {
+        test_quarantine("June 2 2025");
+    }
+
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, RelA);
+    ECS_TAG(world, RelB);
+    ECS_TAG(world, RelC);
+    ECS_TAG(world, Tgt);
+
+    ecs_add_id(world, RelA, EcsSparse);
+    if (!fragment) ecs_add_id(world, RelA, EcsDontFragment);
+
+    ecs_add_id(world, RelB, EcsSparse);
+    if (!fragment) ecs_add_id(world, RelB, EcsDontFragment);
+
+    ecs_add_id(world, RelC, EcsSparse);
+    if (!fragment) ecs_add_id(world, RelC, EcsDontFragment);
+
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
+
+    ecs_add_pair(world, e1, RelA, Tgt);
+    test_assert(ecs_has_pair(world, e1, RelA, Tgt));
+    test_assert(!ecs_has_pair(world, e1, RelB, Tgt));
+    test_assert(!ecs_has_pair(world, e1, RelC, Tgt));
+
+    ecs_add_pair(world, e1, RelB, Tgt);
+    test_assert(ecs_has_pair(world, e1, RelA, Tgt));
+    test_assert(ecs_has_pair(world, e1, RelB, Tgt));
+    test_assert(!ecs_has_pair(world, e1, RelC, Tgt));
+
+    ecs_add_pair(world, e2, RelA, Tgt);
+    test_assert(ecs_has_pair(world, e2, RelA, Tgt));
+    test_assert(!ecs_has_pair(world, e2, RelB, Tgt));
+    test_assert(!ecs_has_pair(world, e2, RelC, Tgt));
+
+    ecs_add_pair(world, e2, RelC, Tgt);
+    test_assert(ecs_has_pair(world, e2, RelA, Tgt));
+    test_assert(!ecs_has_pair(world, e2, RelB, Tgt));
+    test_assert(ecs_has_pair(world, e2, RelC, Tgt));
+
+    ecs_remove_pair(world, e1, EcsWildcard, Tgt);
+    test_assert(!ecs_has_pair(world, e1, RelA, Tgt));
+    test_assert(!ecs_has_pair(world, e1, RelB, Tgt));
+    test_assert(!ecs_has_pair(world, e1, RelC, Tgt));
+
+    test_assert(ecs_has_pair(world, e2, RelA, Tgt));
+    test_assert(!ecs_has_pair(world, e2, RelB, Tgt));
+    test_assert(ecs_has_pair(world, e2, RelC, Tgt));
+
+    ecs_remove_pair(world, e2, EcsWildcard, Tgt);
+    test_assert(!ecs_has_pair(world, e2, RelA, Tgt));
+    test_assert(!ecs_has_pair(world, e2, RelB, Tgt));
+    test_assert(!ecs_has_pair(world, e2, RelC, Tgt));
+
+    ecs_fini(world);
+}
+
+void Sparse_remove_pair_wildcard_tgt(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    ECS_TAG(world, TgtC);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
+
+    ecs_add_pair(world, e1, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e1, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtC));
+
+    ecs_add_pair(world, e1, Rel, TgtB);
+    test_assert(ecs_has_pair(world, e1, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e1, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtC));
+
+    ecs_add_pair(world, e2, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_add_pair(world, e2, Rel, TgtC);
+    test_assert(ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_remove_pair(world, e1, Rel, EcsWildcard);
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtC));
+
+    test_assert(ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_remove_pair(world, e2, Rel, EcsWildcard);
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_fini(world);
+}
+
+void Sparse_remove_pair_wildcard_tgt_exclusive(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    ECS_TAG(world, TgtC);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
+
+    ecs_add_pair(world, e1, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e1, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtC));
+
+    ecs_add_pair(world, e1, Rel, TgtB);
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e1, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtC));
+
+    ecs_add_pair(world, e2, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_add_pair(world, e2, Rel, TgtC);
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_remove_pair(world, e1, Rel, EcsWildcard);
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e1, Rel, TgtC));
+
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_remove_pair(world, e2, Rel, EcsWildcard);
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtB));
+    test_assert(!ecs_has_pair(world, e2, Rel, TgtC));
+
+    ecs_fini(world);
+}
+
+static
+void OnPair(ecs_iter_t *it) {
+    int *invoked = it->ctx;
+    (*invoked) ++;
+}
+
+void Sparse_remove_pair_wildcard_tgt_w_observer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    ECS_TAG(world, TgtC);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    int invoked_tgt_a = 0, invoked_tgt_b = 0, invoked_tgt_c = 0;
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair(Rel, TgtA) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_a
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair(Rel, TgtB) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_b
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair(Rel, TgtC) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_c
+    });
+
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
+
+    ecs_add_pair(world, e1, Rel, TgtA);
+    ecs_add_pair(world, e1, Rel, TgtB);
+
+    ecs_add_pair(world, e2, Rel, TgtA);
+    ecs_add_pair(world, e2, Rel, TgtC);
+
+    test_int(invoked_tgt_a, 0);
+    test_int(invoked_tgt_b, 0);
+    test_int(invoked_tgt_c, 0);
+
+    ecs_remove_pair(world, e1, Rel, EcsWildcard);
+    test_int(invoked_tgt_a, 1);
+    test_int(invoked_tgt_b, 1);
+    test_int(invoked_tgt_c, 0);
+
+    ecs_remove_pair(world, e2, Rel, EcsWildcard);
+    test_int(invoked_tgt_a, 2);
+    test_int(invoked_tgt_b, 1);
+    test_int(invoked_tgt_c, 1);
+
+    ecs_fini(world);
+}
+
+void Sparse_remove_pair_wildcard_tgt_exclusive_w_observer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    ECS_TAG(world, TgtC);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    int invoked_tgt_a = 0, invoked_tgt_b = 0, invoked_tgt_c = 0;
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair(Rel, TgtA) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_a
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair(Rel, TgtB) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_b
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair(Rel, TgtC) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_c
+    });
+
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
+
+    ecs_add_pair(world, e1, Rel, TgtA);
+    test_int(invoked_tgt_a, 0);
+    ecs_add_pair(world, e1, Rel, TgtB);
+    test_int(invoked_tgt_a, 1);
+
+    ecs_add_pair(world, e2, Rel, TgtA);
+    ecs_add_pair(world, e2, Rel, TgtC);
+    test_int(invoked_tgt_a, 2);
+
+    test_int(invoked_tgt_a, 2);
+    test_int(invoked_tgt_b, 0);
+    test_int(invoked_tgt_c, 0);
+
+    ecs_remove_pair(world, e1, Rel, EcsWildcard);
+    test_int(invoked_tgt_a, 2);
+    test_int(invoked_tgt_b, 1);
+    test_int(invoked_tgt_c, 0);
+
+    ecs_remove_pair(world, e2, Rel, EcsWildcard);
+    test_int(invoked_tgt_a, 2);
+    test_int(invoked_tgt_b, 1);
+    test_int(invoked_tgt_c, 1);
+
+    ecs_fini(world);
+}
+
 void Sparse_get(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -1090,8 +1384,69 @@ void Sparse_get_mut_after_remove(void) {
     ecs_fini(world);
 }
 
+void Sparse_has_tag_after_remove(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    test_bool(false, ecs_has(world, e, Foo));
+
+    ecs_add(world, e, Foo);
+    test_bool(true, ecs_has(world, e, Foo));
+
+    ecs_remove(world, e, Foo);
+    test_bool(false, ecs_has(world, e, Foo));
+
+    ecs_fini(world);
+}
+
+void Sparse_has_tag_after_clear(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    test_bool(false, ecs_has(world, e, Foo));
+
+    ecs_add(world, e, Foo);
+    test_bool(true, ecs_has(world, e, Foo));
+
+    ecs_clear(world, e);
+    test_bool(false, ecs_has(world, e, Foo));
+
+    ecs_fini(world);
+}
+
+void Sparse_has_tag_after_delete(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    test_bool(false, ecs_has(world, e, Foo));
+
+    ecs_add(world, e, Foo);
+    test_bool(true, ecs_has(world, e, Foo));
+
+    ecs_delete(world, e);
+    ecs_make_alive(world, e);
+    test_bool(false, ecs_has(world, e, Foo));
+
+    ecs_fini(world);
+}
+
 void Sparse_sparse_w_hole(void) {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -1328,6 +1683,7 @@ void Sparse_override_component_2_lvls(void) {
     ecs_entity_t base_base = ecs_new_w_pair(world, EcsIsA, base);
 
     ecs_entity_t e = ecs_new(world);
+
     ecs_add_pair(world, e, EcsIsA, base_base);
     test_assert(ecs_has(world, e, Position));
     test_assert(ecs_owns(world, e, Position));
@@ -1385,6 +1741,54 @@ void Sparse_override_pair(void) {
     ecs_remove_pair(world, e, Rel, TgtA);
     test_assert(!ecs_owns_pair(world, e, Rel, TgtA));
     test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+
+    ecs_fini(world);
+}
+
+void Sparse_has_override_after_delete(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    ecs_entity_t base = ecs_new(world);
+    ecs_add(world, base, Foo);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, EcsIsA, base);
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+
+    ecs_delete(world, e);
+    ecs_make_alive(world, e);
+
+    test_assert(!ecs_has(world, e, Foo));
+
+    ecs_fini(world);
+}
+
+void Sparse_has_override_after_clear(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    ecs_entity_t base = ecs_new(world);
+    ecs_add(world, base, Foo);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, EcsIsA, base);
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+
+    ecs_clear(world, e);
+
+    test_assert(!ecs_owns(world, e, Foo));
+    test_assert(!ecs_has(world, e, Foo));
 
     ecs_fini(world);
 }
@@ -2243,6 +2647,12 @@ void Position_add_observer(ecs_iter_t *it) {
 }
 
 static
+void Foo_observer(ecs_iter_t *it) {
+    probe_iter(it);
+    test_int(it->count, 1);
+}
+
+static
 void Position_set_observer(ecs_iter_t *it) {
     probe_iter(it);
     test_int(it->count, 1);
@@ -2278,6 +2688,36 @@ void Sparse_on_add_observer(void) {
     test_uint(ctx.event, EcsOnAdd);
     test_uint(ctx.e[0], e);
     test_uint(ctx.c[0][0], ecs_id(Position));
+
+    ecs_fini(world);
+}
+
+void Sparse_on_add_observer_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    Probe ctx = {0};
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = Foo }},
+        .events = {EcsOnAdd},
+        .callback = Foo_observer,
+        .ctx = &ctx
+    });
+
+    test_int(ctx.invoked, 0);
+    ecs_entity_t e = ecs_new_w(world, Foo);
+    test_assert(e != 0);
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_uint(ctx.event, EcsOnAdd);
+    test_uint(ctx.e[0], e);
+    test_uint(ctx.c[0][0], Foo);
 
     ecs_fini(world);
 }
@@ -2510,6 +2950,39 @@ void Sparse_on_remove_observer_fini(void) {
     test_uint(ctx.event, EcsOnRemove);
     test_uint(ctx.e[0], e);
     test_uint(ctx.c[0][0], ecs_id(Position));
+}
+
+void Sparse_on_remove_observer_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+
+    Probe ctx = {0};
+    
+    ecs_observer(world, {
+        .query.terms = {{ .id = Foo }},
+        .events = {EcsOnRemove},
+        .callback = Foo_observer,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t e = ecs_new_w(world, Foo);
+    test_assert(e != 0);
+
+    test_int(ctx.invoked, 0);
+
+    ecs_remove(world, e, Foo);
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_uint(ctx.event, EcsOnRemove);
+    test_uint(ctx.e[0], e);
+    test_uint(ctx.c[0][0], Foo);
+
+    ecs_fini(world);
 }
 
 void Sparse_on_set_after_remove_override(void) {
@@ -2919,6 +3392,86 @@ void Sparse_exclusive_pair_w_hooks(void) {
     ecs_fini(world);
 }
 
+void Sparse_exclusive_pair_w_observers(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    ecs_add_id(world, ecs_id(Position), EcsExclusive);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+
+    int invoked_tgt_a = 0, invoked_tgt_b = 0;
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair_t(Position, TgtA) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_a
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ ecs_pair_t(Position, TgtB) }},
+        .events = { EcsOnRemove },
+        .callback = OnPair,
+        .ctx = &invoked_tgt_b
+    });
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_set_pair(world, e, Position, TgtA, {10, 20});
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p != NULL);
+        test_int(p->x, 10);
+        test_int(p->y, 20);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p == NULL);
+    }
+
+    test_int(invoked_tgt_a, 0);
+    test_int(invoked_tgt_b, 0);
+
+    ecs_set_pair(world, e, Position, TgtB, {30, 40});
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p == NULL);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p != NULL);
+        test_int(p->x, 30);
+        test_int(p->y, 40);
+    }
+
+    test_int(invoked_tgt_a, 1);
+    test_int(invoked_tgt_b, 0);
+
+    ecs_remove_pair(world, e, ecs_id(Position), TgtB);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p == NULL);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p == NULL);
+    }
+
+    test_int(invoked_tgt_a, 1);
+    test_int(invoked_tgt_b, 1);
+
+    ecs_fini(world);
+}
+
 void Sparse_target_1_pair(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -3004,6 +3557,78 @@ void Sparse_target_exclusive_pair(void) {
     test_uint(TgtA, ecs_get_target(world, e1, Rel, 0));
     test_uint(0, ecs_get_target(world, e1, Rel, 1));
 
+    test_uint(TgtB, ecs_get_target(world, e2, Rel, 0));
+    test_uint(0, ecs_get_target(world, e2, Rel, 1));
+
+    ecs_fini(world);
+}
+
+void Sparse_target_exclusive_pair_after_change(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e1 = ecs_new_w_pair(world, Rel, TgtA);
+    ecs_entity_t e2 = ecs_new_w_pair(world, Rel, TgtB);
+
+    test_assert(ecs_has_pair(world, e1, Rel, TgtA));
+    test_uint(TgtA, ecs_get_target(world, e1, Rel, 0));
+    test_uint(0, ecs_get_target(world, e1, Rel, 1));
+
+    test_assert(ecs_has_pair(world, e2, Rel, TgtB));
+    test_uint(TgtB, ecs_get_target(world, e2, Rel, 0));
+    test_uint(0, ecs_get_target(world, e2, Rel, 1));
+
+    ecs_add_pair(world, e1, Rel, TgtB);
+    ecs_add_pair(world, e2, Rel, TgtA);
+
+    test_assert(ecs_has_pair(world, e1, Rel, TgtB));
+    test_uint(TgtB, ecs_get_target(world, e1, Rel, 0));
+    test_uint(0, ecs_get_target(world, e1, Rel, 1));
+
+    test_assert(ecs_has_pair(world, e2, Rel, TgtA));
+    test_uint(TgtA, ecs_get_target(world, e2, Rel, 0));
+    test_uint(0, ecs_get_target(world, e2, Rel, 1));
+
+    ecs_fini(world);
+}
+
+void Sparse_target_exclusive_pair_after_add_same(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e1 = ecs_new_w_pair(world, Rel, TgtA);
+    ecs_entity_t e2 = ecs_new_w_pair(world, Rel, TgtB);
+
+    test_assert(ecs_has_pair(world, e1, Rel, TgtA));
+    test_uint(TgtA, ecs_get_target(world, e1, Rel, 0));
+    test_uint(0, ecs_get_target(world, e1, Rel, 1));
+
+    test_assert(ecs_has_pair(world, e2, Rel, TgtB));
+    test_uint(TgtB, ecs_get_target(world, e2, Rel, 0));
+    test_uint(0, ecs_get_target(world, e2, Rel, 1));
+
+    ecs_add_pair(world, e1, Rel, TgtA);
+    ecs_add_pair(world, e2, Rel, TgtB);
+
+    test_assert(ecs_has_pair(world, e1, Rel, TgtA));
+    test_uint(TgtA, ecs_get_target(world, e1, Rel, 0));
+    test_uint(0, ecs_get_target(world, e1, Rel, 1));
+
+    test_assert(ecs_has_pair(world, e2, Rel, TgtB));
     test_uint(TgtB, ecs_get_target(world, e2, Rel, 0));
     test_uint(0, ecs_get_target(world, e2, Rel, 1));
 
@@ -4282,6 +4907,393 @@ void Sparse_defer_batched_set_remove_existing(void) {
     ecs_fini(world);
 }
 
+void Sparse_defer_batched_add(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+    ecs_add_id(world, ecs_id(Velocity), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Velocity), EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add(world, e, Position);
+    ecs_add(world, e, Velocity);
+    test_assert(!ecs_has(world, e, Position));
+    test_assert(!ecs_has(world, e, Velocity));
+    ecs_defer_end(world);
+    test_assert(ecs_has(world, e, Position));
+    test_assert(ecs_has(world, e, Velocity));
+
+    {
+        const Position *p = ecs_get(world, e, Position);
+        test_assert(p != NULL);
+    }
+    {
+        const Velocity *p = ecs_get(world, e, Velocity);
+        test_assert(p != NULL);
+    }
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_add_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add_pair(world, e, ecs_id(Position), TgtA);
+    ecs_add_pair(world, e, ecs_id(Position), TgtB);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == 0);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == 0);
+    ecs_defer_end(world);
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtB));
+
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p != NULL);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p != NULL);
+    }
+
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == TgtA);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == TgtB);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_add_exclusive_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, ecs_id(Position), EcsExclusive);
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add_pair(world, e, ecs_id(Position), TgtA);
+    ecs_add_pair(world, e, ecs_id(Position), TgtB);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == 0);
+    ecs_defer_end(world);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtB));
+
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p == NULL);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p != NULL);
+    }
+
+    // printf("%s\n", ecs_get_path(world, ecs_get_target(world, e, ecs_id(Position), 0)));
+
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == TgtB);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == 0);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_add_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+    ecs_add_id(world, Bar, EcsSparse);
+    if (!fragment) ecs_add_id(world, Bar, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add(world, e, Foo);
+    ecs_add(world, e, Bar);
+    test_assert(!ecs_has(world, e, Foo));
+    test_assert(!ecs_has(world, e, Bar));
+    ecs_defer_end(world);
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_has(world, e, Bar));
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_add_pair_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add_pair(world, e, Rel, TgtA);
+    ecs_add_pair(world, e, Rel, TgtB);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+    ecs_defer_end(world);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_add_exclusive_pair_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add_pair(world, e, Rel, TgtA);
+    ecs_add_pair(world, e, Rel, TgtB);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+    ecs_defer_end(world);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_remove(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+    ecs_add_id(world, ecs_id(Velocity), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Velocity), EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_add(world, e, Position);
+    ecs_add(world, e, Velocity);
+
+    ecs_defer_begin(world);
+    ecs_remove(world, e, Position);
+    ecs_remove(world, e, Velocity);
+    test_assert(ecs_has(world, e, Position));
+    test_assert(ecs_has(world, e, Velocity));
+    ecs_defer_end(world);
+    test_assert(!ecs_has(world, e, Position));
+    test_assert(!ecs_has(world, e, Velocity));
+
+    {
+        const Position *p = ecs_get(world, e, Position);
+        test_assert(p == NULL);
+    }
+    {
+        const Velocity *p = ecs_get(world, e, Velocity);
+        test_assert(p == NULL);
+    }
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_remove_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_add_pair(world, e, ecs_id(Position), TgtA);
+    ecs_add_pair(world, e, ecs_id(Position), TgtB);
+
+    ecs_defer_begin(world);
+    ecs_remove_pair(world, e, ecs_id(Position), TgtA);
+    ecs_remove_pair(world, e, ecs_id(Position), TgtB);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == TgtA);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == TgtB);
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    ecs_defer_end(world);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtB));
+
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p == NULL);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p == NULL);
+    }
+
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == 0);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == 0);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_remove_exclusive_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, ecs_id(Position), EcsExclusive);
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, ecs_id(Position), TgtA);
+    ecs_add_pair(world, e, ecs_id(Position), TgtB);
+
+    ecs_defer_begin(world);
+    ecs_remove_pair(world, e, ecs_id(Position), TgtB);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(ecs_has_pair(world, e, ecs_id(Position), TgtB));
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == TgtB);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == 0);
+    ecs_defer_end(world);
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtA));
+    test_assert(!ecs_has_pair(world, e, ecs_id(Position), TgtB));
+
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtA);
+        test_assert(p == NULL);
+    }
+    {
+        const Position *p = ecs_get_pair(world, e, Position, TgtB);
+        test_assert(p == NULL);
+    }
+
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 0) == 0);
+    test_assert(ecs_get_target(world, e, ecs_id(Position), 1) == 0);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_remove_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_add_id(world, Foo, EcsSparse);
+    if (!fragment) ecs_add_id(world, Foo, EcsDontFragment);
+    ecs_add_id(world, Bar, EcsSparse);
+    if (!fragment) ecs_add_id(world, Bar, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add(world, e, Foo);
+    ecs_add(world, e, Bar);
+
+    ecs_defer_begin(world);
+    ecs_remove(world, e, Foo);
+    ecs_remove(world, e, Bar);
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_has(world, e, Bar));
+    ecs_defer_end(world);
+    test_assert(!ecs_has(world, e, Foo));
+    test_assert(!ecs_has(world, e, Bar));
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_remove_pair_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, Rel, TgtA);
+    ecs_add_pair(world, e, Rel, TgtB);
+
+    ecs_defer_begin(world);
+    ecs_remove_pair(world, e, Rel, TgtA);
+    ecs_remove_pair(world, e, Rel, TgtB);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+    ecs_defer_end(world);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_batched_remove_exclusive_pair_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+
+    ecs_add_id(world, Rel, EcsSparse);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, Rel, TgtA);
+    ecs_add_pair(world, e, Rel, TgtB);
+
+    ecs_defer_begin(world);
+    ecs_remove_pair(world, e, Rel, TgtB);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+    ecs_defer_end(world);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
 void Sparse_dont_fragment_trait_without_sparse_trait(void) {
     if (fragment) {
         test_assert(true);
@@ -4424,4 +5436,116 @@ void Sparse_on_delete_target_sparse_panic(void) {
 
     test_expect_abort();
     ecs_delete(world, tgt);
+}
+
+void Sparse_delete_relationship(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    
+    ecs_add_pair(world, e, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_add_pair(world, e, Rel, TgtB);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_delete(world, Rel);
+
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
+void Sparse_delete_parent_of_relationship(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t parent = ecs_new(world);
+    ecs_add_pair(world, Rel, EcsChildOf, parent);
+
+    ecs_entity_t e = ecs_new(world);
+    
+    ecs_add_pair(world, e, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_add_pair(world, e, Rel, TgtB);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_delete(world, parent);
+
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
+void Sparse_delete_exclusive_relationship(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t e = ecs_new(world);
+    
+    ecs_add_pair(world, e, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_add_pair(world, e, Rel, TgtB);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_delete(world, Rel);
+
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
+}
+
+void Sparse_delete_parent_of_exclusive_relationship(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, TgtA);
+    ECS_TAG(world, TgtB);
+    ecs_add_id(world, Rel, EcsExclusive);
+    if (!fragment) ecs_add_id(world, Rel, EcsDontFragment);
+
+    ecs_entity_t parent = ecs_new(world);
+    ecs_add_pair(world, Rel, EcsChildOf, parent);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_add_pair(world, e, Rel, TgtA);
+    test_assert(ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_add_pair(world, e, Rel, TgtB);
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_delete(world, parent);
+
+    test_assert(!ecs_has_pair(world, e, Rel, TgtA));
+    test_assert(!ecs_has_pair(world, e, Rel, TgtB));
+
+    ecs_fini(world);
 }

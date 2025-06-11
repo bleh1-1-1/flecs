@@ -289,7 +289,18 @@ void flecs_component_ids_set(
     int32_t index,
     ecs_entity_t id);
 
+/** Query iterator function for trivially cached queries.
+ * This operation can be called if an iterator matches the conditions for 
+ * trivial iteration:
+ * 
+ * @param it The query iterator.
+ * @return Whether the query has more results.
+ */
+FLECS_API
+bool flecs_query_trivial_cached_next(
+    ecs_iter_t *it);
 
+#ifdef FLECS_DEBUG
 /** Check if current thread has exclusive access to world.
  * This operation checks if the current thread is allowed to access the world.
  * The operation is called by internal functions before mutating the world, and
@@ -305,8 +316,22 @@ void flecs_component_ids_set(
  * @param world The world.
  */
 FLECS_API
-void flecs_check_exclusive_world_access(
+void flecs_check_exclusive_world_access_write(
     const ecs_world_t *world);
+
+/** Same as flecs_check_exclusive_world_access_write, but for read access. 
+ * 
+ * @param world The world.
+ */
+FLECS_API
+void flecs_check_exclusive_world_access_read(
+    const ecs_world_t *world);
+
+#else
+#define flecs_check_exclusive_world_access_write(world)
+#define flecs_check_exclusive_world_access_read(world)
+#endif
+
 
 /** Calculate offset from address */
 #ifdef __cplusplus

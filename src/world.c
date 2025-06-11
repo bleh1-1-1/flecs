@@ -407,9 +407,7 @@ void flecs_eval_component_monitor(
         for (i = 0; i < count; i ++) {
             ecs_query_t *q = elems[i];
             flecs_poly_assert(q, ecs_query_t);
-            flecs_query_cache_notify(world, q, &(ecs_query_cache_event_t) {
-                .kind = EcsQueryTableRematch
-            });
+            flecs_query_rematch(world, q);
         }
     }
 
@@ -514,6 +512,7 @@ void flecs_update_component_monitor_w_array(
     int i;
     for (i = 0; i < ids->count; i ++) {
         ecs_entity_t id = ids->array[i];
+
         if (ECS_HAS_ID_FLAG(id, PAIR)) {
             flecs_monitor_mark_dirty(world, 
                 ecs_pair(ECS_PAIR_FIRST(id), EcsWildcard));
@@ -704,7 +703,6 @@ void flecs_world_allocators_init(
     ecs_map_params_init(&a->query_table_list, &world->allocator);
 
     flecs_ballocator_init_t(&a->query_table, ecs_query_cache_table_t);
-    flecs_ballocator_init_t(&a->query_table_match, ecs_query_cache_table_match_t);
     flecs_ballocator_init_n(&a->graph_edge_lo, ecs_graph_edge_t, FLECS_HI_COMPONENT_ID);
     flecs_ballocator_init_t(&a->graph_edge, ecs_graph_edge_t);
     flecs_ballocator_init_t(&a->id_record, ecs_component_record_t);
@@ -725,7 +723,6 @@ void flecs_world_allocators_fini(
     ecs_map_params_fini(&a->ptr);
     ecs_map_params_fini(&a->query_table_list);
     flecs_ballocator_fini(&a->query_table);
-    flecs_ballocator_fini(&a->query_table_match);
     flecs_ballocator_fini(&a->graph_edge_lo);
     flecs_ballocator_fini(&a->graph_edge);
     flecs_ballocator_fini(&a->id_record);
@@ -887,6 +884,9 @@ ecs_world_t *ecs_mini(void) {
     ecs_set_os_api_impl();
 #endif
     ecs_os_init();
+
+    ecs_assert(ECS_ALIGNOF(ecs_query_triv_cache_match_t) == 
+               ECS_ALIGNOF(ecs_query_cache_match_t), ECS_INTERNAL_ERROR, NULL);
 
     ecs_trace("#[bold]bootstrapping world");
     ecs_log_push();
@@ -1404,8 +1404,6 @@ void flecs_increment_table_version(
 
     world->table_version[table->id & ECS_TABLE_VERSION_ARRAY_BITMASK] ++;
     table->version ++;
-
-    return;
 }
 
 uint32_t flecs_get_table_version_fast(
@@ -1414,6 +1412,29 @@ uint32_t flecs_get_table_version_fast(
 {
     flecs_poly_assert(world, ecs_world_t);
     return world->table_version[table_id & ECS_TABLE_VERSION_ARRAY_BITMASK];
+}
+
+void flecs_increment_table_column_version(
+    ecs_world_t *world,
+    ecs_table_t *table)
+{
+    flecs_poly_assert(world, ecs_world_t);
+    ecs_assert(table != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    int32_t index = table->id & ECS_TABLE_VERSION_ARRAY_BITMASK;
+    world->table_column_version[index] ++;
+    if (world->table_column_version[index] == UINT32_MAX) {
+        /* Skip sentinel value */
+        world->table_column_version[index] = 0;
+    }
+}
+
+uint32_t flecs_get_table_column_version(
+    const ecs_world_t *world,
+    const uint64_t table_id)
+{
+    flecs_poly_assert(world, ecs_world_t);
+    return world->table_column_version[table_id & ECS_TABLE_VERSION_ARRAY_BITMASK];
 }
 
 static int32_t flecs_component_ids_last_index = 0;
@@ -1477,7 +1498,9 @@ void flecs_component_ids_set(
     ecs_vec_get_t(&world->component_ids, ecs_entity_t, index)[0] = component;
 }
 
-void flecs_check_exclusive_world_access(
+#ifdef FLECS_DEBUG
+
+void flecs_check_exclusive_world_access_write(
     const ecs_world_t *world)
 {
     flecs_poly_assert(world, ecs_world_t);
@@ -1489,12 +1512,61 @@ void flecs_check_exclusive_world_access(
     ecs_os_thread_id_t thr_self = ecs_os_thread_self();
     (void)thr_self;
 
-    ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
-        ECS_INVALID_OPERATION,
-        "invalid access to world by thread %" PRIu64 " "
-            "(thread %" PRIu64 " has exclusive access)",
-                thr_self, world->exclusive_access);
+    if (world->exclusive_access == UINT64_MAX) {
+        ecs_throw(ECS_ACCESS_VIOLATION,
+            "invalid access: world is locked for write operations");
+    } else 
+    if (world->exclusive_thread_name) {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "thread %" PRIu64 " (%s) has exclusive access",
+                    thr_self, world->exclusive_access,
+                    world->exclusive_thread_name);
+    } else {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "thread %" PRIu64 " has exclusive access",
+                    thr_self, world->exclusive_access);
+    }
+error:
+    return;
 }
+
+void flecs_check_exclusive_world_access_read(
+    const ecs_world_t *world)
+{
+    flecs_poly_assert(world, ecs_world_t);
+
+    if (!world->exclusive_access) {
+        return; /* Exclusive access is not enabled */
+    }
+
+    if (world->exclusive_access == UINT64_MAX) {
+        return; /* World is locked, so read access is allowed */
+    }
+
+    ecs_os_thread_id_t thr_self = ecs_os_thread_self();
+    (void)thr_self;
+
+    if (world->exclusive_thread_name) {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "(thread %" PRIu64 " (%s) has exclusive access)",
+                    thr_self, world->exclusive_access,
+                    world->exclusive_thread_name);
+    } else {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "thread %" PRIu64 " has exclusive access",
+                    thr_self, world->exclusive_access);
+    }
+}
+
+#endif
 
 static
 void flecs_process_empty_queries(
@@ -1660,20 +1732,40 @@ void ecs_shrink(
 }
 
 void ecs_exclusive_access_begin(
-    ecs_world_t *world)
+    ecs_world_t *world,
+    const char *thread_name)
 {
     flecs_poly_assert(world, ecs_world_t);
 
+    /* If world was locked, one thread can get exclusive access */
+    if (world->exclusive_access == UINT64_MAX) {
+        world->exclusive_access = 0;
+    }
+
     ecs_assert(!world->exclusive_access, ECS_INVALID_OPERATION,
-        "cannot begin exclusive access: world already in exclusive mode");
+        "cannot begin exclusive access: world already in exclusive mode "
+        "by thread %" PRIu64 " (%s)", 
+        world->exclusive_access, 
+        world->exclusive_thread_name 
+            ? world->exclusive_thread_name 
+            : "no thread name");
 
     world->exclusive_access = ecs_os_thread_self();
+    world->exclusive_thread_name = thread_name;
 }
 
 void ecs_exclusive_access_end(
-    ecs_world_t *world)
+    ecs_world_t *world,
+    bool lock_world)
 {
     flecs_poly_assert(world, ecs_world_t);
+
+    /* If the world is locked (not exclusively accessed by a specific thread)
+     * this allows for unlocking the world without first calling access_begin */
+    if (world->exclusive_access == UINT64_MAX) {
+        world->exclusive_access = 0;
+        return;
+    }
 
     ecs_assert(world->exclusive_access != 0, ECS_INVALID_OPERATION,
         "cannot end exclusive access: world is not in exclusive mode");
@@ -1684,7 +1776,13 @@ void ecs_exclusive_access_end(
     ecs_assert(world->exclusive_access == thr_self, ECS_INVALID_OPERATION,
         "cannot end exclusive access from thread that does not have exclusive access");
 
-    world->exclusive_access = 0;
+    if (!lock_world) {
+        world->exclusive_access = 0;
+    } else {
+        /* Prevent any mutations on the world */
+        world->exclusive_access = UINT64_MAX;
+        world->exclusive_thread_name = "locked world";
+    }
 }
 
 ecs_entity_t ecs_set_with(

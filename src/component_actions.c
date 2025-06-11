@@ -44,15 +44,17 @@ void flecs_invoke_hook(
         tr = &dummy_tr;
     }
 
-    flecs_iter_init(world, &it, flecs_iter_cache_all);
+    ecs_entity_t dummy_src = 0;
+
     it.world = world;
     it.real_world = world;
     it.table = table;
-    it.trs[0] = tr;
+    it.trs = &tr;
     it.row_fields = !!(((ecs_component_record_t*)tr->hdr.cache)->flags & EcsIdIsSparse);
     it.ref_fields = it.row_fields;
     it.sizes = ECS_CONST_CAST(ecs_size_t*, &ti->size);
-    it.ids[0] = id;
+    it.ids = &id;
+    it.sources = &dummy_src;
     it.event = event;
     it.event_id = id;
     it.ctx = ti->hooks.ctx;
@@ -62,7 +64,6 @@ void flecs_invoke_hook(
     it.flags = EcsIterIsValid;
 
     hook(&it);
-    ecs_iter_fini(&it);
 
     world->stages[0]->defer = defer;
 }
@@ -90,6 +91,45 @@ void flecs_on_unparent(
     flecs_ordered_children_unparent(world, table, row, count);
 }
 
+bool flecs_sparse_on_add_cr(
+    ecs_world_t *world,
+    ecs_table_t *table,
+    int32_t row,
+    ecs_component_record_t *cr,
+    bool construct,
+    void **ptr_out)
+{
+    bool is_new = false;
+
+    if (cr && cr->flags & EcsIdIsSparse) {
+        void *result = NULL;
+        int32_t sparse_count = flecs_sparse_count(cr->sparse);
+
+        if (construct) {
+            result = flecs_component_sparse_insert(
+                world, cr, table, row);
+        } else {
+            result = flecs_component_sparse_emplace(
+                world, cr, table, row);
+        }
+
+        if (ptr_out)  {
+            *ptr_out = result;
+        }
+
+        if (cr->flags & EcsIdDontFragment) {
+            is_new = sparse_count != flecs_sparse_count(cr->sparse);
+            if (is_new) {
+                const ecs_entity_t *entities = ecs_table_entities(table);
+                ecs_record_t *r = flecs_entities_get(world, entities[row]);
+                r->row |= EcsEntityHasDontFragment;
+            }
+        }
+    }
+
+    return is_new;
+}
+
 bool flecs_sparse_on_add(
     ecs_world_t *world,
     ecs_table_t *table,
@@ -104,21 +144,10 @@ bool flecs_sparse_on_add(
     for (i = 0; i < added->count; i ++) {
         ecs_id_t id = added->array[i];
         ecs_component_record_t *cr = flecs_components_get(world, id);
-        
-        if (cr && cr->flags & EcsIdIsSparse) {
-            int32_t sparse_count = flecs_sparse_count(cr->sparse);
 
-            for (j = 0; j < count; j ++) {
-                if (construct) {
-                    flecs_component_sparse_insert(world, cr, table, row + j);
-                } else {
-                    flecs_component_sparse_emplace(world, cr, table, row + j);
-                }
-            }
-
-            if (cr->flags & EcsIdDontFragment) {
-                is_new |= sparse_count != flecs_sparse_count(cr->sparse);
-            }
+        for (j = 0; j < count; j ++) {
+            is_new |= flecs_sparse_on_add_cr(
+                world, table, row + j, cr, construct, NULL);
         }
     }
 
@@ -161,7 +190,7 @@ bool flecs_dont_fragment_on_remove(
             const ecs_entity_t *entities = ecs_table_entities(table);
             for (j = 0; j < count; j ++) {
                 ecs_entity_t e = entities[row + j];
-                if (flecs_component_sparse_get(cr, e)) {
+                if (flecs_component_sparse_has(cr, e)) {
                     return true;
                 }
             }
@@ -188,8 +217,7 @@ void flecs_entity_remove_non_fragmenting(
     while (cur) {
         ecs_assert(cur->flags & EcsIdIsSparse, ECS_INTERNAL_ERROR, NULL);
         if (cur->sparse && !(ecs_id_is_wildcard(cur->id))) {
-            void *ptr = flecs_sparse_get(cur->sparse, 0, e);
-            if (ptr) {
+            if (flecs_sparse_has(cur->sparse, e)) {
                 ecs_type_t type = { .count = 1, .array = &cur->id };
 
                 flecs_emit(world, world, 0, &(ecs_event_desc_t) {
@@ -293,15 +321,6 @@ void flecs_notify_on_add(
         if (sparse && (diff_flags & EcsTableHasSparse)) {
             if (flecs_sparse_on_add(world, table, row, count, added, construct)) {
                 diff_flags |= EcsTableHasOnAdd;
-            }
-
-            if (diff_flags & EcsTableHasDontFragment) {
-                int32_t i;
-                const ecs_entity_t *entities = ecs_table_entities(table);
-                for (i = row; i < (row + count); i ++) {
-                    ecs_record_t *r = flecs_entities_get(world, entities[i]);
-                    r->row |= EcsEntityHasDontFragment;
-                }
             }
         }
 

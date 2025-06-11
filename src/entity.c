@@ -142,7 +142,7 @@ ecs_entity_t flecs_new_id(
 {
     flecs_poly_assert(world, ecs_world_t);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     /* It is possible that the world passed to this function is a stage, so
      * make sure we have the actual world. Cast away const since this is one of
@@ -150,21 +150,10 @@ ecs_entity_t flecs_new_id(
      * since it is thread safe (uses atomic inc when in threading mode) */
     ecs_world_t *unsafe_world = ECS_CONST_CAST(ecs_world_t*, world);
 
-    ecs_entity_t entity;
-    if (unsafe_world->flags & EcsWorldMultiThreaded) {
-        /* When world is in multithreading mode, make sure OS API has threading 
-         * functions initialized */
-        ecs_assert(ecs_os_has_threading(), ECS_INVALID_OPERATION, 
-            "thread safe id creation unavailable: threading API not available");
+    ecs_assert(!(unsafe_world->flags & EcsWorldMultiThreaded),
+        ECS_INVALID_OPERATION, "cannot create entities in multithreaded mode");
 
-        /* Can't atomically increase number above max int */
-        ecs_assert(flecs_entities_max_id(unsafe_world) < UINT_MAX, 
-            ECS_INVALID_OPERATION, "thread safe ids exhausted");
-        entity = (ecs_entity_t)ecs_os_ainc(
-            (int32_t*)&flecs_entities_max_id(unsafe_world));
-    } else {
-        entity = flecs_entities_new_id(unsafe_world);
-    }
+    ecs_entity_t entity = flecs_entities_new_id(unsafe_world);
 
     ecs_assert(!unsafe_world->info.max_id || 
         ecs_entity_t_lo(entity) <= unsafe_world->info.max_id, 
@@ -717,7 +706,7 @@ ecs_entity_t ecs_new_low_id(
 
     ecs_stage_t *stage = flecs_stage_from_world(&world);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     if (world->flags & EcsWorldReadonly) {
         /* Can't issue new comp id while iterating when in multithreaded mode */
@@ -745,19 +734,6 @@ error:
     return 0;
 }
 
-ecs_entity_t ecs_new_w_id(
-    ecs_world_t *world,
-    ecs_id_t id)
-{
-    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(ecs_id_is_valid(world, id), ECS_INVALID_PARAMETER, NULL);
-    ecs_entity_t entity = ecs_new(world);
-    ecs_add_id(world, entity, id);
-    return entity;
-error:
-    return 0;
-}
-
 ecs_entity_t ecs_new_w_table(
     ecs_world_t *world,
     ecs_table_t *table)
@@ -779,6 +755,39 @@ ecs_entity_t ecs_new_w_table(
     };
 
     flecs_new_entity(world, entity, r, table, &table_diff, true, 0);
+
+    return entity;
+error:
+    return 0;
+}
+
+ecs_entity_t ecs_new_w_id(
+    ecs_world_t *world,
+    ecs_id_t id)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_id_is_valid(world, id), ECS_INVALID_PARAMETER, NULL);
+
+    ecs_stage_t *stage = flecs_stage_from_world(&world);
+
+    if (flecs_defer_cmd(stage)) {
+        ecs_assert(ecs_is_deferred(world), ECS_INTERNAL_ERROR, NULL);
+        ecs_entity_t e = ecs_new(world);
+        ecs_add_id(world, e, id);
+        return e;
+    }
+
+    ecs_table_diff_t table_diff = ECS_TABLE_DIFF_INIT;
+    ecs_table_t *table = flecs_table_traverse_add(
+        world, &world->store.root, &id, &table_diff);
+    
+    ecs_entity_t entity = flecs_new_id(world);
+    ecs_record_t *r = flecs_entities_get(world, entity);
+    flecs_new_entity(world, entity, r, table, &table_diff, true, 0);
+
+    flecs_defer_end(world, stage);
+
+    ecs_assert(!ecs_is_deferred(world), ECS_INTERNAL_ERROR, NULL);
 
     return entity;
 error:
@@ -1310,7 +1319,7 @@ const ecs_entity_t* ecs_bulk_init(
     ecs_check(desc->_canary == 0, ECS_INVALID_PARAMETER,
         "ecs_bulk_desc_t was not initialized to zero");
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     const ecs_entity_t *entities = desc->entities;
     int32_t count = desc->count;
@@ -1835,6 +1844,8 @@ void* ecs_get_mut_id(
 
     world = ecs_get_world(world);
 
+    flecs_check_exclusive_world_access_write(world);
+
     ecs_record_t *r = flecs_entities_get(world, entity);
     ecs_assert(r != NULL, ECS_INVALID_PARAMETER, NULL);
 
@@ -2254,7 +2265,7 @@ void ecs_enable_id(
         "add CanToggle trait to component");
 
     ecs_entity_t bs_id = id | ECS_TOGGLE;
-    ecs_add_id(world, entity, bs_id);
+    ecs_add_id((ecs_world_t*)stage, entity, bs_id);
 
     if (flecs_defer_enable(stage, entity, id, enable)) {
         return;
@@ -2329,7 +2340,7 @@ void ecs_set_child_order(
 
     flecs_stage_from_world(&world);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     ecs_component_record_t *cr = flecs_components_get(
         world, ecs_childof(parent));
@@ -2637,6 +2648,7 @@ int32_t ecs_get_depth(
     ecs_entity_t rel)
 {
     ecs_check(ecs_is_valid(world, rel), ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_is_alive(world, entity), ECS_INVALID_PARAMETER, NULL);
     ecs_check(ecs_has_id(world, rel, EcsAcyclic), ECS_INVALID_PARAMETER, 
         "cannot safely determine depth for relationship that is not acyclic "
             "(add Acyclic property to relationship)");
@@ -2656,6 +2668,11 @@ bool ecs_is_valid(
     ecs_entity_t entity)
 {
     ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    #ifdef FLECS_DEBUG
+    world = ecs_get_world(world);
+    flecs_check_exclusive_world_access_read(world);
+    #endif
 
     /* 0 is not a valid entity id */
     if (!entity) {
@@ -2698,6 +2715,8 @@ bool ecs_is_alive(
 
     world = ecs_get_world(world);
 
+    flecs_check_exclusive_world_access_read(world);
+
     return flecs_entities_is_alive(world, entity);
 error:
     return false;
@@ -2715,6 +2734,8 @@ ecs_entity_t ecs_get_alive(
 
     /* Make sure we're not working with a stage */
     world = ecs_get_world(world);
+
+    flecs_check_exclusive_world_access_read(world);
 
     if (flecs_entities_is_alive(world, entity)) {
         return entity;
@@ -2745,6 +2766,8 @@ void ecs_make_alive(
 
     /* Const cast is safe, function checks for threading */
     world = ECS_CONST_CAST(ecs_world_t*, ecs_get_world(world));
+
+    flecs_check_exclusive_world_access_write(world);
 
     /* The entity index can be mutated while in staged/readonly mode, as long as
      * the world is not multithreaded. */
@@ -2824,6 +2847,8 @@ bool ecs_exists(
 
     world = ecs_get_world(world);
 
+    flecs_check_exclusive_world_access_read(world);
+
     return flecs_entities_exists(world, entity);
 error:
     return false;
@@ -2838,6 +2863,8 @@ void ecs_set_version(
         "cannot change entity generation when world is in readonly mode");
     ecs_assert(!(ecs_is_deferred(world)), ECS_INVALID_OPERATION, 
         "cannot change entity generation while world is deferred");
+
+    flecs_check_exclusive_world_access_write(world);
 
     flecs_entities_make_alive(world, entity_with_generation);
 
@@ -2859,6 +2886,8 @@ ecs_table_t* ecs_get_table(
     ecs_check(ecs_is_valid(world, entity), ECS_INVALID_PARAMETER, NULL);
     
     world = ecs_get_world(world);
+
+    flecs_check_exclusive_world_access_read(world);
 
     ecs_record_t *record = flecs_entities_get(world, entity);
     ecs_assert(record != NULL, ECS_INTERNAL_ERROR, NULL);

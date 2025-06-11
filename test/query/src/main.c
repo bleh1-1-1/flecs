@@ -799,6 +799,14 @@ void Plan_cached_isa_tgt_w_self_second_no_expr(void);
 void Plan_cached_w_not_and_uncacheable(void);
 void Plan_cached_w_optional_and_uncacheable(void);
 void Plan_cached_w_not_optional_and_uncacheable(void);
+void Plan_cached_w_not(void);
+void Plan_cached_w_not_wildcard(void);
+void Plan_cached_w_not_simple(void);
+void Plan_cached_w_not_wildcard_simple(void);
+void Plan_cached_w_optional(void);
+void Plan_cached_w_optional_wildcard(void);
+void Plan_cached_w_optional_simple(void);
+void Plan_cached_w_optional_wildcard_simple(void);
 
 // Testsuite 'Variables'
 void Variables_setup(void);
@@ -899,6 +907,10 @@ void Variables_3_set_src_this_w_tag_tag_uncacheable_component(void);
 void Variables_3_set_src_this_w_component_tag_uncacheable_component(void);
 void Variables_3_set_src_this_w_component_component_uncacheable_component(void);
 void Variables_2_set_src_this_w_wildcard(void);
+void Variables_2_set_src_this_w_not(void);
+void Variables_3_set_src_this_w_not_wildcard(void);
+void Variables_2_set_src_this_w_optional(void);
+void Variables_3_set_src_this_w_optional_wildcard(void);
 void Variables_1_src_this_var_as_entity(void);
 void Variables_1_src_this_var_as_table(void);
 void Variables_1_src_this_var_as_table_range(void);
@@ -991,6 +1003,9 @@ void Variables_2_trivial_1_any_component(void);
 void Variables_first_invalid_var_name_and_id(void);
 void Variables_src_invalid_var_name_and_id(void);
 void Variables_second_invalid_var_name_and_id(void);
+void Variables_get_vars_from_chained_iter(void);
+void Variables_set_var_from_chained_iter(void);
+void Variables_set_var_range_from_chained_iter(void);
 
 // Testsuite 'Operators'
 void Operators_setup(void);
@@ -1153,6 +1168,9 @@ void Operators_or_from_existing_and_new_table(void);
 void Operators_or_w_wildcard(void);
 void Operators_or_w_component_and_tag(void);
 void Operators_or_w_tag_and_component(void);
+void Operators_not_isa_wildcard(void);
+void Operators_not_transitive_rel_wildcard(void);
+void Operators_not_reflexive_rel_wildcard(void);
 
 // Testsuite 'Transitive'
 void Transitive_1_fact_0_lvl_true(void);
@@ -1655,6 +1673,7 @@ void Cached_rematch_after_add_to_recycled_parent(void);
 void Cached_match_query_expr_from_scope(void);
 void Cached_query_long_or_w_ref(void);
 void Cached_query_w_pair_id_and_subj(void);
+void Cached_rematch_after_delete_overridden_tag(void);
 void Cached_rematch_after_delete_inherited_tag(void);
 void Cached_rematch_after_delete_rel_of_inherited_pair(void);
 void Cached_rematch_after_delete_obj_of_inherited_pair(void);
@@ -1663,6 +1682,23 @@ void Cached_rematch_empty_table_w_superset(void);
 void Cached_2_self_up_terms_new_tables(void);
 void Cached_this_self_up_childof_pair_new_tables(void);
 void Cached_up_w_delete_table_and_move_parent(void);
+void Cached_it_ptrs(void);
+void Cached_it_ptrs_after_column_resize(void);
+void Cached_it_ptrs_after_column_merge(void);
+void Cached_it_ptrs_after_column_shrink(void);
+void Cached_it_ptrs_w_wildcard(void);
+void Cached_it_ptrs_w_up(void);
+void Cached_test_it_ptrs(void);
+void Cached_test_it_ptrs_w_wildcard(void);
+void Cached_test_it_ptrs_w_up(void);
+void Cached_match_count_after_rematch(void);
+void Cached_no_rematch_after_parent_delete(void);
+void Cached_no_rematch_after_parent_create(void);
+void Cached_no_rematch_after_batched_parent_create(void);
+void Cached_no_rematch_after_instantiate(void);
+void Cached_no_rematch_after_batched_instantiate(void);
+void Cached_rematch_after_delete_base_of_base(void);
+void Cached_rematch_after_delete_first_base_of_base(void);
 
 // Testsuite 'ChangeDetection'
 void ChangeDetection_query_changed_after_new(void);
@@ -1702,6 +1738,36 @@ void ChangeDetection_query_changed_after_count(void);
 void ChangeDetection_staged_query_w_shared_inout_field(void);
 void ChangeDetection_staged_query_w_fixed_inout_field(void);
 void ChangeDetection_staged_query_w_fixed_inout_field_read(void);
+void ChangeDetection_simple_write_query(void);
+void ChangeDetection_change_detection_w_early_out(void);
+void ChangeDetection_change_detection_w_early_out_skip(void);
+void ChangeDetection_mark_dirty_w_uncached_trivial_search(void);
+void ChangeDetection_mark_dirty_w_uncached_trivial_test(void);
+void ChangeDetection_mark_dirty_w_uncached_w_up_search(void);
+void ChangeDetection_mark_dirty_w_uncached_w_up_test(void);
+void ChangeDetection_mark_dirty_w_uncached_w_fixed_search(void);
+void ChangeDetection_mark_dirty_w_uncached_w_fixed_test(void);
+void ChangeDetection_mark_dirty_w_uncached_w_wildcard_search(void);
+void ChangeDetection_mark_dirty_w_uncached_w_wildcard_test(void);
+void ChangeDetection_mark_dirty_w_cached_trivial_search(void);
+void ChangeDetection_mark_dirty_w_cached_trivial_test(void);
+void ChangeDetection_mark_dirty_w_cached_w_up_search(void);
+void ChangeDetection_mark_dirty_w_cached_w_up_test(void);
+void ChangeDetection_mark_dirty_w_cached_w_fixed_search(void);
+void ChangeDetection_mark_dirty_w_cached_w_fixed_test(void);
+void ChangeDetection_mark_dirty_w_cached_w_wildcard_search(void);
+void ChangeDetection_mark_dirty_w_cached_w_wildcard_test(void);
+void ChangeDetection_detect_w_trivial_search(void);
+void ChangeDetection_detect_w_trivial_test(void);
+void ChangeDetection_detect_w_up_search(void);
+void ChangeDetection_detect_w_up_test(void);
+void ChangeDetection_detect_w_fixed_search(void);
+void ChangeDetection_detect_w_fixed_test(void);
+void ChangeDetection_detect_w_wildcard_search(void);
+void ChangeDetection_detect_w_wildcard_test(void);
+void ChangeDetection_detect_w_group_by(void);
+void ChangeDetection_detect_w_cascade(void);
+void ChangeDetection_detect_w_cascade_desc(void);
 
 // Testsuite 'GroupBy'
 void GroupBy_group_by(void);
@@ -1716,6 +1782,12 @@ void GroupBy_group_by_w_deleted_group_id(void);
 void GroupBy_group_by_callbacks(void);
 void GroupBy_group_by_default_action(void);
 void GroupBy_group_table_count(void);
+void GroupBy_get_group_from_chained_iter(void);
+void GroupBy_group_by_recreate_group_after_rematch(void);
+void GroupBy_group_by_recreate_one_group_after_rematch(void);
+void GroupBy_group_by_recreate_two_groups_after_rematch(void);
+void GroupBy_group_by_move_to_group_after_rematch(void);
+void GroupBy_group_by_childof(void);
 
 // Testsuite 'MemberTarget'
 void MemberTarget_setup(void);
@@ -2019,6 +2091,10 @@ void DontFragment_1_sparse_component_unused(void);
 void DontFragment_1_sparse_tag_unused(void);
 void DontFragment_1_sparse_pair_wildcard_unused(void);
 void DontFragment_1_sparse_pair_unused(void);
+void DontFragment_2_this_written_sparse_component_unused(void);
+void DontFragment_2_this_written_sparse_tag_unused(void);
+void DontFragment_2_this_written_sparse_pair_wildcard_unused(void);
+void DontFragment_2_this_written_sparse_pair_unused(void);
 void DontFragment_sparse_0_src_only_term(void);
 void DontFragment_sparse_0_src(void);
 void DontFragment_sparse_pair_first(void);
@@ -2186,6 +2262,7 @@ void OrderBy_sort_or_term(void);
 void OrderBy_sort_optional_term(void);
 void OrderBy_order_empty_table(void);
 void OrderBy_order_empty_table_only(void);
+void OrderBy_order_empty_table_only_2_tables(void);
 
 // Testsuite 'OrderByEntireTable'
 void OrderByEntireTable_sort_by_component(void);
@@ -2225,6 +2302,26 @@ void OrderByEntireTable_sort_shared_w_delete(void);
 void OrderByEntireTable_sort_not_term(void);
 void OrderByEntireTable_sort_or_term(void);
 void OrderByEntireTable_sort_optional_term(void);
+
+// Testsuite 'TrivialIter'
+void TrivialIter_uncached_trivial_search(void);
+void TrivialIter_uncached_trivial_test(void);
+void TrivialIter_cached_trivial_search(void);
+void TrivialIter_cached_trivial_test(void);
+void TrivialIter_cached_trivial_search_w_up(void);
+void TrivialIter_cached_trivial_test_w_up(void);
+void TrivialIter_cached_trivial_search_w_not_operator(void);
+void TrivialIter_cached_trivial_test_w_not_operator(void);
+void TrivialIter_cached_trivial_search_w_not_wildcard_operator(void);
+void TrivialIter_cached_trivial_test_w_not_wildcard_operator(void);
+void TrivialIter_cached_trivial_search_w_or_operator(void);
+void TrivialIter_cached_trivial_test_w_or_operator(void);
+void TrivialIter_cached_trivial_search_w_optional_operator(void);
+void TrivialIter_cached_trivial_test_w_optional_operator(void);
+void TrivialIter_cached_trivial_search_w_optional_wildcard_operator(void);
+void TrivialIter_cached_trivial_test_w_optional_wildcard_operator(void);
+void TrivialIter_cached_trivial_search_w_wildcard(void);
+void TrivialIter_cached_trivial_test_w_wildcard(void);
 
 // Testsuite 'QueryStr'
 void QueryStr_one_term(void);
@@ -5386,6 +5483,38 @@ bake_test_case Plan_testcases[] = {
     {
         "cached_w_not_optional_and_uncacheable",
         Plan_cached_w_not_optional_and_uncacheable
+    },
+    {
+        "cached_w_not",
+        Plan_cached_w_not
+    },
+    {
+        "cached_w_not_wildcard",
+        Plan_cached_w_not_wildcard
+    },
+    {
+        "cached_w_not_simple",
+        Plan_cached_w_not_simple
+    },
+    {
+        "cached_w_not_wildcard_simple",
+        Plan_cached_w_not_wildcard_simple
+    },
+    {
+        "cached_w_optional",
+        Plan_cached_w_optional
+    },
+    {
+        "cached_w_optional_wildcard",
+        Plan_cached_w_optional_wildcard
+    },
+    {
+        "cached_w_optional_simple",
+        Plan_cached_w_optional_simple
+    },
+    {
+        "cached_w_optional_wildcard_simple",
+        Plan_cached_w_optional_wildcard_simple
     }
 };
 
@@ -5779,6 +5908,22 @@ bake_test_case Variables_testcases[] = {
         Variables_2_set_src_this_w_wildcard
     },
     {
+        "2_set_src_this_w_not",
+        Variables_2_set_src_this_w_not
+    },
+    {
+        "3_set_src_this_w_not_wildcard",
+        Variables_3_set_src_this_w_not_wildcard
+    },
+    {
+        "2_set_src_this_w_optional",
+        Variables_2_set_src_this_w_optional
+    },
+    {
+        "3_set_src_this_w_optional_wildcard",
+        Variables_3_set_src_this_w_optional_wildcard
+    },
+    {
         "1_src_this_var_as_entity",
         Variables_1_src_this_var_as_entity
     },
@@ -6145,6 +6290,18 @@ bake_test_case Variables_testcases[] = {
     {
         "second_invalid_var_name_and_id",
         Variables_second_invalid_var_name_and_id
+    },
+    {
+        "get_vars_from_chained_iter",
+        Variables_get_vars_from_chained_iter
+    },
+    {
+        "set_var_from_chained_iter",
+        Variables_set_var_from_chained_iter
+    },
+    {
+        "set_var_range_from_chained_iter",
+        Variables_set_var_range_from_chained_iter
     }
 };
 
@@ -6784,6 +6941,18 @@ bake_test_case Operators_testcases[] = {
     {
         "or_w_tag_and_component",
         Operators_or_w_tag_and_component
+    },
+    {
+        "not_isa_wildcard",
+        Operators_not_isa_wildcard
+    },
+    {
+        "not_transitive_rel_wildcard",
+        Operators_not_transitive_rel_wildcard
+    },
+    {
+        "not_reflexive_rel_wildcard",
+        Operators_not_reflexive_rel_wildcard
     }
 };
 
@@ -8738,6 +8907,10 @@ bake_test_case Cached_testcases[] = {
         Cached_query_w_pair_id_and_subj
     },
     {
+        "rematch_after_delete_overridden_tag",
+        Cached_rematch_after_delete_overridden_tag
+    },
+    {
         "rematch_after_delete_inherited_tag",
         Cached_rematch_after_delete_inherited_tag
     },
@@ -8768,6 +8941,74 @@ bake_test_case Cached_testcases[] = {
     {
         "up_w_delete_table_and_move_parent",
         Cached_up_w_delete_table_and_move_parent
+    },
+    {
+        "it_ptrs",
+        Cached_it_ptrs
+    },
+    {
+        "it_ptrs_after_column_resize",
+        Cached_it_ptrs_after_column_resize
+    },
+    {
+        "it_ptrs_after_column_merge",
+        Cached_it_ptrs_after_column_merge
+    },
+    {
+        "it_ptrs_after_column_shrink",
+        Cached_it_ptrs_after_column_shrink
+    },
+    {
+        "it_ptrs_w_wildcard",
+        Cached_it_ptrs_w_wildcard
+    },
+    {
+        "it_ptrs_w_up",
+        Cached_it_ptrs_w_up
+    },
+    {
+        "test_it_ptrs",
+        Cached_test_it_ptrs
+    },
+    {
+        "test_it_ptrs_w_wildcard",
+        Cached_test_it_ptrs_w_wildcard
+    },
+    {
+        "test_it_ptrs_w_up",
+        Cached_test_it_ptrs_w_up
+    },
+    {
+        "match_count_after_rematch",
+        Cached_match_count_after_rematch
+    },
+    {
+        "no_rematch_after_parent_delete",
+        Cached_no_rematch_after_parent_delete
+    },
+    {
+        "no_rematch_after_parent_create",
+        Cached_no_rematch_after_parent_create
+    },
+    {
+        "no_rematch_after_batched_parent_create",
+        Cached_no_rematch_after_batched_parent_create
+    },
+    {
+        "no_rematch_after_instantiate",
+        Cached_no_rematch_after_instantiate
+    },
+    {
+        "no_rematch_after_batched_instantiate",
+        Cached_no_rematch_after_batched_instantiate
+    },
+    {
+        "rematch_after_delete_base_of_base",
+        Cached_rematch_after_delete_base_of_base
+    },
+    {
+        "rematch_after_delete_first_base_of_base",
+        Cached_rematch_after_delete_first_base_of_base
     }
 };
 
@@ -8919,6 +9160,126 @@ bake_test_case ChangeDetection_testcases[] = {
     {
         "staged_query_w_fixed_inout_field_read",
         ChangeDetection_staged_query_w_fixed_inout_field_read
+    },
+    {
+        "simple_write_query",
+        ChangeDetection_simple_write_query
+    },
+    {
+        "change_detection_w_early_out",
+        ChangeDetection_change_detection_w_early_out
+    },
+    {
+        "change_detection_w_early_out_skip",
+        ChangeDetection_change_detection_w_early_out_skip
+    },
+    {
+        "mark_dirty_w_uncached_trivial_search",
+        ChangeDetection_mark_dirty_w_uncached_trivial_search
+    },
+    {
+        "mark_dirty_w_uncached_trivial_test",
+        ChangeDetection_mark_dirty_w_uncached_trivial_test
+    },
+    {
+        "mark_dirty_w_uncached_w_up_search",
+        ChangeDetection_mark_dirty_w_uncached_w_up_search
+    },
+    {
+        "mark_dirty_w_uncached_w_up_test",
+        ChangeDetection_mark_dirty_w_uncached_w_up_test
+    },
+    {
+        "mark_dirty_w_uncached_w_fixed_search",
+        ChangeDetection_mark_dirty_w_uncached_w_fixed_search
+    },
+    {
+        "mark_dirty_w_uncached_w_fixed_test",
+        ChangeDetection_mark_dirty_w_uncached_w_fixed_test
+    },
+    {
+        "mark_dirty_w_uncached_w_wildcard_search",
+        ChangeDetection_mark_dirty_w_uncached_w_wildcard_search
+    },
+    {
+        "mark_dirty_w_uncached_w_wildcard_test",
+        ChangeDetection_mark_dirty_w_uncached_w_wildcard_test
+    },
+    {
+        "mark_dirty_w_cached_trivial_search",
+        ChangeDetection_mark_dirty_w_cached_trivial_search
+    },
+    {
+        "mark_dirty_w_cached_trivial_test",
+        ChangeDetection_mark_dirty_w_cached_trivial_test
+    },
+    {
+        "mark_dirty_w_cached_w_up_search",
+        ChangeDetection_mark_dirty_w_cached_w_up_search
+    },
+    {
+        "mark_dirty_w_cached_w_up_test",
+        ChangeDetection_mark_dirty_w_cached_w_up_test
+    },
+    {
+        "mark_dirty_w_cached_w_fixed_search",
+        ChangeDetection_mark_dirty_w_cached_w_fixed_search
+    },
+    {
+        "mark_dirty_w_cached_w_fixed_test",
+        ChangeDetection_mark_dirty_w_cached_w_fixed_test
+    },
+    {
+        "mark_dirty_w_cached_w_wildcard_search",
+        ChangeDetection_mark_dirty_w_cached_w_wildcard_search
+    },
+    {
+        "mark_dirty_w_cached_w_wildcard_test",
+        ChangeDetection_mark_dirty_w_cached_w_wildcard_test
+    },
+    {
+        "detect_w_trivial_search",
+        ChangeDetection_detect_w_trivial_search
+    },
+    {
+        "detect_w_trivial_test",
+        ChangeDetection_detect_w_trivial_test
+    },
+    {
+        "detect_w_up_search",
+        ChangeDetection_detect_w_up_search
+    },
+    {
+        "detect_w_up_test",
+        ChangeDetection_detect_w_up_test
+    },
+    {
+        "detect_w_fixed_search",
+        ChangeDetection_detect_w_fixed_search
+    },
+    {
+        "detect_w_fixed_test",
+        ChangeDetection_detect_w_fixed_test
+    },
+    {
+        "detect_w_wildcard_search",
+        ChangeDetection_detect_w_wildcard_search
+    },
+    {
+        "detect_w_wildcard_test",
+        ChangeDetection_detect_w_wildcard_test
+    },
+    {
+        "detect_w_group_by",
+        ChangeDetection_detect_w_group_by
+    },
+    {
+        "detect_w_cascade",
+        ChangeDetection_detect_w_cascade
+    },
+    {
+        "detect_w_cascade_desc",
+        ChangeDetection_detect_w_cascade_desc
     }
 };
 
@@ -8970,6 +9331,30 @@ bake_test_case GroupBy_testcases[] = {
     {
         "group_table_count",
         GroupBy_group_table_count
+    },
+    {
+        "get_group_from_chained_iter",
+        GroupBy_get_group_from_chained_iter
+    },
+    {
+        "group_by_recreate_group_after_rematch",
+        GroupBy_group_by_recreate_group_after_rematch
+    },
+    {
+        "group_by_recreate_one_group_after_rematch",
+        GroupBy_group_by_recreate_one_group_after_rematch
+    },
+    {
+        "group_by_recreate_two_groups_after_rematch",
+        GroupBy_group_by_recreate_two_groups_after_rematch
+    },
+    {
+        "group_by_move_to_group_after_rematch",
+        GroupBy_group_by_move_to_group_after_rematch
+    },
+    {
+        "group_by_childof",
+        GroupBy_group_by_childof
     }
 };
 
@@ -10148,6 +10533,22 @@ bake_test_case DontFragment_testcases[] = {
         DontFragment_1_sparse_pair_unused
     },
     {
+        "2_this_written_sparse_component_unused",
+        DontFragment_2_this_written_sparse_component_unused
+    },
+    {
+        "2_this_written_sparse_tag_unused",
+        DontFragment_2_this_written_sparse_tag_unused
+    },
+    {
+        "2_this_written_sparse_pair_wildcard_unused",
+        DontFragment_2_this_written_sparse_pair_wildcard_unused
+    },
+    {
+        "2_this_written_sparse_pair_unused",
+        DontFragment_2_this_written_sparse_pair_unused
+    },
+    {
         "sparse_0_src_only_term",
         DontFragment_sparse_0_src_only_term
     },
@@ -10800,6 +11201,10 @@ bake_test_case OrderBy_testcases[] = {
     {
         "order_empty_table_only",
         OrderBy_order_empty_table_only
+    },
+    {
+        "order_empty_table_only_2_tables",
+        OrderBy_order_empty_table_only_2_tables
     }
 };
 
@@ -10951,6 +11356,81 @@ bake_test_case OrderByEntireTable_testcases[] = {
     {
         "sort_optional_term",
         OrderByEntireTable_sort_optional_term
+    }
+};
+
+bake_test_case TrivialIter_testcases[] = {
+    {
+        "uncached_trivial_search",
+        TrivialIter_uncached_trivial_search
+    },
+    {
+        "uncached_trivial_test",
+        TrivialIter_uncached_trivial_test
+    },
+    {
+        "cached_trivial_search",
+        TrivialIter_cached_trivial_search
+    },
+    {
+        "cached_trivial_test",
+        TrivialIter_cached_trivial_test
+    },
+    {
+        "cached_trivial_search_w_up",
+        TrivialIter_cached_trivial_search_w_up
+    },
+    {
+        "cached_trivial_test_w_up",
+        TrivialIter_cached_trivial_test_w_up
+    },
+    {
+        "cached_trivial_search_w_not_operator",
+        TrivialIter_cached_trivial_search_w_not_operator
+    },
+    {
+        "cached_trivial_test_w_not_operator",
+        TrivialIter_cached_trivial_test_w_not_operator
+    },
+    {
+        "cached_trivial_search_w_not_wildcard_operator",
+        TrivialIter_cached_trivial_search_w_not_wildcard_operator
+    },
+    {
+        "cached_trivial_test_w_not_wildcard_operator",
+        TrivialIter_cached_trivial_test_w_not_wildcard_operator
+    },
+    {
+        "cached_trivial_search_w_or_operator",
+        TrivialIter_cached_trivial_search_w_or_operator
+    },
+    {
+        "cached_trivial_test_w_or_operator",
+        TrivialIter_cached_trivial_test_w_or_operator
+    },
+    {
+        "cached_trivial_search_w_optional_operator",
+        TrivialIter_cached_trivial_search_w_optional_operator
+    },
+    {
+        "cached_trivial_test_w_optional_operator",
+        TrivialIter_cached_trivial_test_w_optional_operator
+    },
+    {
+        "cached_trivial_search_w_optional_wildcard_operator",
+        TrivialIter_cached_trivial_search_w_optional_wildcard_operator
+    },
+    {
+        "cached_trivial_test_w_optional_wildcard_operator",
+        TrivialIter_cached_trivial_test_w_optional_wildcard_operator
+    },
+    {
+        "cached_trivial_search_w_wildcard",
+        TrivialIter_cached_trivial_search_w_wildcard
+    },
+    {
+        "cached_trivial_test_w_wildcard",
+        TrivialIter_cached_trivial_test_w_wildcard
     }
 };
 
@@ -11204,14 +11684,14 @@ static bake_test_suite suites[] = {
         "Plan",
         NULL,
         NULL,
-        79,
+        87,
         Plan_testcases
     },
     {
         "Variables",
         Variables_setup,
         NULL,
-        189,
+        196,
         Variables_testcases,
         1,
         Variables_params
@@ -11220,7 +11700,7 @@ static bake_test_suite suites[] = {
         "Operators",
         Operators_setup,
         NULL,
-        159,
+        162,
         Operators_testcases,
         1,
         Operators_params
@@ -11286,21 +11766,21 @@ static bake_test_suite suites[] = {
         "Cached",
         NULL,
         NULL,
-        88,
+        106,
         Cached_testcases
     },
     {
         "ChangeDetection",
         NULL,
         NULL,
-        37,
+        67,
         ChangeDetection_testcases
     },
     {
         "GroupBy",
         NULL,
         NULL,
-        12,
+        18,
         GroupBy_testcases
     },
     {
@@ -11334,7 +11814,7 @@ static bake_test_suite suites[] = {
         "DontFragment",
         DontFragment_setup,
         NULL,
-        81,
+        85,
         DontFragment_testcases,
         1,
         DontFragment_params
@@ -11352,7 +11832,7 @@ static bake_test_suite suites[] = {
         "OrderBy",
         NULL,
         NULL,
-        44,
+        45,
         OrderBy_testcases
     },
     {
@@ -11361,6 +11841,13 @@ static bake_test_suite suites[] = {
         NULL,
         37,
         OrderByEntireTable_testcases
+    },
+    {
+        "TrivialIter",
+        NULL,
+        NULL,
+        18,
+        TrivialIter_testcases
     },
     {
         "QueryStr",
@@ -11372,5 +11859,5 @@ static bake_test_suite suites[] = {
 };
 
 int main(int argc, char *argv[]) {
-    return bake_test_run("query", argc, argv, suites, 26);
+    return bake_test_run("query", argc, argv, suites, 27);
 }

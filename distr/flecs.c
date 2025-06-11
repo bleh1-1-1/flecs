@@ -1055,6 +1055,15 @@ void flecs_ordered_children_fini(
     ecs_world_t *world,
     ecs_component_record_t *cr);
 
+/* Populate ordered children storage with existing children. */
+void flecs_ordered_children_populate(
+    ecs_world_t *world,
+    ecs_component_record_t *cr);
+
+/* Clear ordered children storage. */
+void flecs_ordered_children_clear(
+    ecs_component_record_t *cr);
+
 /* Reparent entities in ordered children storage. */
 void flecs_ordered_children_reparent(
     ecs_world_t *world,
@@ -1506,119 +1515,6 @@ struct ecs_query_impl_t {
     flecs_poly_dtor_t dtor;
 };
 
-
-/* Query cache types */
-
-/** Table match data.
- * Each table matched by the query is represented by an ecs_query_cache_table_match_t
- * instance, which are linked together in a list. A table may match a query
- * multiple times (due to wildcard queries) with different columns being matched
- * by the query. */
-struct ecs_query_cache_table_match_t {
-    ecs_query_cache_table_match_t *next, *prev;
-    ecs_table_t *table;              /* The current table. */
-    int32_t offset;                  /* Starting point in table  */
-    int32_t count;                   /* Number of entities to iterate in table */
-    const ecs_table_record_t **trs;  /* Information about where to find field in table */
-    ecs_id_t *ids;                   /* Resolved (component) ids for current table */
-    ecs_entity_t *sources;           /* Subjects (sources) of ids */
-    ecs_table_t **tables;            /* Tables for fields with non-$this source */
-    ecs_termset_t set_fields;        /* Fields that are set */
-    ecs_termset_t up_fields;         /* Fields that are matched through traversal */
-    uint64_t group_id;               /* Value used to organize tables in groups */
-    int32_t *monitor;                /* Used to monitor table for changes */
-
-    /* Next match in cache for same table (includes empty tables) */
-    ecs_query_cache_table_match_t *next_match;
-};
-
-/** Table record type for query table cache. A query only has one per table. */
-typedef struct ecs_query_cache_table_t {
-    const ecs_table_cache_hdr_t hdr;       /* Header for ecs_table_cache_t */
-    ecs_query_cache_table_match_t *first;  /* List with matches for table */
-    ecs_query_cache_table_match_t *last;   /* Last discovered match for table */
-    uint64_t table_id;
-    int32_t rematch_count;           /* Track whether table was rematched */
-} ecs_query_cache_table_t;
-
-/** Points to the beginning & ending of a query group */
-typedef struct ecs_query_cache_table_list_t {
-    ecs_query_cache_table_match_t *first;
-    ecs_query_cache_table_match_t *last;
-    ecs_query_group_info_t info;
-} ecs_query_cache_table_list_t;
-
-/* Query event type for notifying queries of world events */
-typedef enum ecs_query_cache_eventkind_t {
-    EcsQueryTableMatch,
-    EcsQueryTableRematch,
-    EcsQueryTableUnmatch,
-} ecs_query_cache_eventkind_t;
-
-typedef struct ecs_query_cache_event_t {
-    ecs_query_cache_eventkind_t kind;
-    ecs_table_t *table;
-} ecs_query_cache_event_t;
-
-/* Query level block allocators have sizes that depend on query field count */
-typedef struct ecs_query_cache_allocators_t {
-    ecs_block_allocator_t pointers;
-    ecs_block_allocator_t ids;
-    ecs_block_allocator_t monitors;
-} ecs_query_cache_allocators_t;
-
-/** Query that is automatically matched against tables */
-typedef struct ecs_query_cache_t {
-    /* Uncached query used to populate the cache */
-    ecs_query_t *query;
-
-    /* Observer to keep the cache in sync */
-    ecs_observer_t *observer;
-
-    /* Tables matched with query */
-    ecs_table_cache_t cache;
-
-    /* Linked list with all matched non-empty tables, in iteration order */
-    ecs_query_cache_table_list_t list;
-
-    /* Contains head/tail to nodes of query groups (if group_by is used) */
-    ecs_map_t groups;
-
-    /* Table sorting */
-    ecs_entity_t order_by;
-    ecs_order_by_action_t order_by_callback;
-    ecs_sort_table_action_t order_by_table_callback;
-    ecs_vec_t table_slices;
-    int32_t order_by_term;
-
-    /* Table grouping */
-    ecs_entity_t group_by;
-    ecs_group_by_action_t group_by_callback;
-    ecs_group_create_action_t on_group_create;
-    ecs_group_delete_action_t on_group_delete;
-    void *group_by_ctx;
-    ecs_ctx_free_t group_by_ctx_free;
-
-    /* Monitor generation */
-    int32_t monitor_generation;
-
-    int32_t cascade_by;              /* Identify cascade term */
-    int32_t match_count;             /* How often have tables been (un)matched */
-    int32_t prev_match_count;        /* Track if sorting is needed */
-    int32_t rematch_count;           /* Track which tables were added during rematch */
-    
-    ecs_entity_t entity;
-
-    /* Zero'd out sources array, used for results that only match on $this */
-    ecs_entity_t *sources;
-
-    /* Map field indices from cache to query */
-    int8_t *field_map;
-
-    /* Query-level allocators */
-    ecs_query_cache_allocators_t allocators;
-} ecs_query_cache_t;
-
 #endif
 
 
@@ -1698,38 +1594,120 @@ void flecs_query_end_block(
     bool reset);
 
 
-/**
- * @file query/engine/engine.h
- * @brief Query engine functions.
- */
-
  /**
- * @file query/engine/cache.h
+ * @file query/cache/cache.h
  * @brief Query cache functions.
  */
 
 
-/* Create query cache */
+/** Table match data.
+ * Each table matched by the query is represented by an ecs_query_cache_match_t
+ * instance, which are linked together in a list. A table may match a query
+ * multiple times (due to wildcard queries) with different columns being matched
+ * by the query. */
+typedef struct ecs_query_triv_cache_match_t {
+    ecs_table_t *table;              /* The current table. */
+    const ecs_table_record_t **trs;  /* Information about where to find field in table. */
+    void **ptrs;                     /* Cached column pointers for match. */
+    uint32_t table_version;          /* Used to check if pointers need to be revalidated. */
+    ecs_termset_t set_fields;        /* Fields that are set (used by fields with Optional/Not). */
+} ecs_query_triv_cache_match_t;
+
+struct ecs_query_cache_match_t {
+    ecs_query_triv_cache_match_t base;
+    int32_t _offset;                  /* Starting point in table . */
+    int32_t _count;                   /* Number of entities to iterate in table. */
+    ecs_id_t *_ids;                   /* Resolved (component) ids for current table. */
+    ecs_entity_t *_sources;           /* Subjects (sources) of ids. */
+    ecs_table_t **_tables;            /* Tables for fields with non-$this source. */
+    ecs_termset_t _up_fields;         /* Fields that are matched through traversal. */
+    int32_t *_monitor;                /* Used to monitor table for changes. */
+    int32_t rematch_count;            /* Track whether table was rematched. */
+    ecs_vec_t *wildcard_matches;      /* Additional matches for table for wildcard queries. */
+};
+
+/** Query group */
+struct ecs_query_cache_group_t {
+    ecs_vec_t tables;                 /* vec<ecs_query_cache_match_t> */
+    ecs_query_group_info_t info;      /* Group info available to application. */
+    ecs_query_cache_group_t *next;    /* Next group to iterate (only set for queries with group_by). */
+};
+
+/** Table record type for query table cache. A query only has one per table. */
+typedef struct ecs_query_cache_table_t {
+    ecs_query_cache_group_t *group;   /* Group the table is added to. */
+    int32_t index;                    /* Index into group->tables. */
+} ecs_query_cache_table_t;
+
+/* Query level block allocators have sizes that depend on query field count */
+typedef struct ecs_query_cache_allocators_t {
+    ecs_block_allocator_t pointers;
+    ecs_block_allocator_t ids;
+    ecs_block_allocator_t monitors;
+} ecs_query_cache_allocators_t;
+
+/** Query that is automatically matched against tables */
+typedef struct ecs_query_cache_t {
+    /* Uncached query used to populate the cache */
+    ecs_query_t *query;
+
+    /* Observer to keep the cache in sync */
+    ecs_observer_t *observer;
+
+    /* Tables matched with query */
+    ecs_map_t tables;
+
+    /* Query groups, if group_by is used */
+    ecs_map_t groups;
+
+    /* Default query group */
+    ecs_query_cache_group_t default_group;
+
+    /* Groups in iteration order */
+    ecs_query_cache_group_t *first_group;
+
+    /* Table sorting */
+    ecs_entity_t order_by;
+    ecs_order_by_action_t order_by_callback;
+    ecs_sort_table_action_t order_by_table_callback;
+    ecs_vec_t table_slices;
+    int32_t order_by_term;
+
+    /* Table grouping */
+    ecs_entity_t group_by;
+    ecs_group_by_action_t group_by_callback;
+    ecs_group_create_action_t on_group_create;
+    ecs_group_delete_action_t on_group_delete;
+    void *group_by_ctx;
+    ecs_ctx_free_t group_by_ctx_free;
+
+    /* Monitor generation */
+    int32_t monitor_generation;
+
+    int32_t cascade_by;              /* Identify cascade term */
+    int32_t match_count;             /* How often have tables been (un)matched */
+    int32_t prev_match_count;        /* Track if sorting is needed */
+    int32_t rematch_count;           /* Track which tables were added during rematch */
+    
+    ecs_entity_t entity;             /* Entity associated with query */
+
+    /* Zero'd out sources array, used for results that only match on $this */
+    ecs_entity_t *sources;
+
+    /* Map field indices from cache query to actual query */
+    int8_t *field_map;
+
+    /* Query-level allocators */
+    ecs_query_cache_allocators_t allocators;
+} ecs_query_cache_t;
+
 ecs_query_cache_t* flecs_query_cache_init(
     ecs_query_impl_t *impl,
     const ecs_query_desc_t *desc);
 
-/* Destroy query cache */
 void flecs_query_cache_fini(
     ecs_query_impl_t *impl);
 
-/* Notify query cache of event (separate from query observer) */
-void flecs_query_cache_notify(
-    ecs_world_t *world,
-    ecs_query_t *q,
-    ecs_query_cache_event_t *event);
-
-/* Get cache entry for table */
-ecs_query_cache_table_t* flecs_query_cache_get_table(
-    ecs_query_cache_t *query,
-    ecs_table_t *table);
-
-/* Sort tables (order_by implementation) */
 void flecs_query_cache_sort_tables(
     ecs_world_t *world,
     ecs_query_impl_t *impl);
@@ -1737,19 +1715,22 @@ void flecs_query_cache_sort_tables(
 void flecs_query_cache_build_sorted_tables(
     ecs_query_cache_t *cache);
 
-/* Return number of tables in cache */
-int32_t flecs_query_cache_table_count(
-    ecs_query_cache_t *cache);
+bool flecs_query_cache_is_trivial(
+    const ecs_query_cache_t *cache);
 
-/* Return number of entities in cache (requires iterating tables) */
-int32_t flecs_query_cache_entity_count(
+ecs_size_t flecs_query_cache_elem_size(
     const ecs_query_cache_t *cache);
 
 /**
- * @file query/engine/cache_iter.h
+ * @file query/cache/iter.h
  * @brief Cache iterator functions.
  */
 
+
+void flecs_query_cache_iter_init(
+    ecs_iter_t *it,
+    ecs_query_iter_t *qit,
+    ecs_query_impl_t *impl);
 
 /* Cache search */
 bool flecs_query_cache_search(
@@ -1769,40 +1750,91 @@ bool flecs_query_is_cache_test(
     const ecs_query_run_ctx_t *ctx,
     bool redo);
 
+bool flecs_query_is_trivial_cache_search(
+    const ecs_query_run_ctx_t *ctx);
+
+bool flecs_query_is_trivial_cache_test(
+    const ecs_query_run_ctx_t *ctx,
+    bool redo);
+
 /**
- * @file query/engine/change_detection.h
- * @brief Query change detection functions.
+ * @file query/cache/group.h
+ * @brief Adding/removing tables to query groups
  */
 
+ecs_query_cache_group_t* flecs_query_cache_get_group(
+    const ecs_query_cache_t *cache,
+    uint64_t group_id);
 
-/* Synchronize cache monitor with table dirty state */
+ecs_query_cache_match_t* flecs_query_cache_add_table(
+    ecs_query_cache_t *cache,
+    ecs_table_t *table);
+
+ecs_query_cache_match_t* flecs_query_cache_ensure_table(
+    ecs_query_cache_t *cache,
+    ecs_table_t *table);
+
+void flecs_query_cache_remove_table(
+    ecs_query_cache_t *cache,
+    ecs_table_t *table);
+
+void flecs_query_cache_remove_all_tables(
+    ecs_query_cache_t *cache);
+
+ecs_query_cache_table_t* flecs_query_cache_get_table(
+    const ecs_query_cache_t *cache,
+    ecs_table_t *table);
+
+ecs_query_cache_match_t* flecs_query_cache_match_from_table(
+    const ecs_query_cache_t *cache,
+    const ecs_query_cache_table_t *qt);
+
+/**
+ * @file query/cache/match.h
+ * @brief Match table one or more times with query.
+ */
+
+void flecs_query_cache_match_fini(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_match_t *qm);
+
+bool flecs_query_cache_match_next(
+    ecs_query_cache_t *cache,
+    ecs_iter_t *it);
+
+/**
+ * @file query/cache/change_detection.h
+ * @brief Query change detection implementation.
+ */
+
 void flecs_query_sync_match_monitor(
     ecs_query_impl_t *impl,
-    ecs_query_cache_table_match_t *match);
+    ecs_query_cache_match_t *match);
 
-/* Mark iterated out fields dirty */
 void flecs_query_mark_fields_dirty(
     ecs_query_impl_t *impl,
     ecs_iter_t *it);
 
-/* Compare cache monitor with table dirty state to detect changes */
 bool flecs_query_check_table_monitor(
     ecs_query_impl_t *impl,
-    ecs_query_cache_table_t *table,
+    ecs_query_cache_match_t *qm,
     int32_t term);
 
-/* Mark out fields with fixed source dirty */
 void flecs_query_mark_fixed_fields_dirty(
     ecs_query_impl_t *impl,
     ecs_iter_t *it);
 
-/* Synchronize fixed source monitor */
 bool flecs_query_update_fixed_monitor(
     ecs_query_impl_t *impl);
 
-/* Compare fixed source monitor */
 bool flecs_query_check_fixed_monitor(
     ecs_query_impl_t *impl);
+
+
+/**
+ * @file query/engine/engine.h
+ * @brief Query engine functions.
+ */
 
 /**
  * @file query/engine/trav_cache.h
@@ -2363,6 +2395,12 @@ ecs_iter_t flecs_query_iter(
 void flecs_query_iter_constrain(
     ecs_iter_t *it);
 
+/* Rematch query after cache could have been invalidated */
+void flecs_query_rematch(
+    ecs_world_t *world,
+    ecs_query_t *q);
+
+
 /**
  * @file component_actions.c
  * @brief Logic executed after adding/removing a component.
@@ -2391,6 +2429,15 @@ bool flecs_sparse_on_add(
     int32_t count,
     const ecs_type_t *added,
     bool construct);
+
+/* Add action for single sparse component. */
+bool flecs_sparse_on_add_cr(
+    ecs_world_t *world,
+    ecs_table_t *table,
+    int32_t row,
+    ecs_component_record_t *cr,
+    bool construct,
+    void **ptr_out);
 
 /* Run add actions for components added to entity. */
 void flecs_notify_on_add(
@@ -2952,7 +2999,7 @@ void flecs_observer_set_disable_bit(
 void flecs_iter_init(
     const ecs_world_t *world,
     ecs_iter_t *it,
-    ecs_flags8_t fields);
+    bool alloc_resources);
 
 /* Deinitialize iterator. */
 void flecs_iter_free(
@@ -3220,7 +3267,6 @@ typedef struct ecs_world_allocators_t {
     ecs_map_params_t ptr;
     ecs_map_params_t query_table_list;
     ecs_block_allocator_t query_table;
-    ecs_block_allocator_t query_table_match;
     ecs_block_allocator_t graph_edge_lo;
     ecs_block_allocator_t graph_edge;
     ecs_block_allocator_t id_record;
@@ -3320,6 +3366,10 @@ struct ecs_world_t {
      * cached pointer is still valid. */
     uint32_t table_version[ECS_TABLE_VERSION_ARRAY_SIZE];
 
+    /* Same as table_version, but only increases after the column pointers of
+     * a table change. */
+    uint32_t table_column_version[ECS_TABLE_VERSION_ARRAY_SIZE];
+
     /* Array for checking if components can be looked up trivially */
     bool non_fragmenting[FLECS_HI_COMPONENT_ID];
 
@@ -3363,7 +3413,10 @@ struct ecs_world_t {
     int32_t workers_waiting;         /* Number of workers waiting on sync */
     ecs_pipeline_state_t* pq;        /* Pointer to the pipeline for the workers to execute */
     bool workers_use_task_api;       /* Workers are short-lived tasks, not long-running threads */
+
+    /* -- Exclusive access */
     ecs_os_thread_id_t exclusive_access; /* If set, world can only be mutated by thread */
+    const char *exclusive_thread_name;   /* Name of thread with exclusive access (used for debugging) */
 
     /* -- Time management -- */
     ecs_time_t world_start_time;     /* Timestamp of simulation start */
@@ -3464,8 +3517,18 @@ void flecs_increment_table_version(
     ecs_world_t *world,
     ecs_table_t *table);
 
+/* Same as flecs_increment_table_version, but for column version. */
+void flecs_increment_table_column_version(
+    ecs_world_t *world,
+    ecs_table_t *table);
+
 /* Get table version. */
 uint32_t flecs_get_table_version_fast(
+    const ecs_world_t *world,
+    const uint64_t table_id);
+
+/* Get table version for column pointer validation. */
+uint32_t flecs_get_table_column_version(
     const ecs_world_t *world,
     const uint64_t table_id);
 
@@ -3867,6 +3930,11 @@ bool flecs_unset_id_flag(
     ecs_component_record_t *cr, 
     ecs_flags32_t flag)
 {
+    if (cr->flags & EcsIdMarkedForDelete) {
+        /* Don't change flags for record that's about to be deleted */
+        return false;
+    }
+
     if ((cr->flags & flag)) {
         cr->flags &= ~flag;
         return true;
@@ -3978,7 +4046,7 @@ void flecs_register_on_delete_object(ecs_iter_t *it) {
     ecs_id_t id = ecs_field_id(it, 0);
     flecs_register_id_flag_for_relation(it, EcsOnDeleteTarget, 
         ECS_ID_ON_DELETE_TARGET_FLAG(ECS_PAIR_SECOND(id)),
-        EcsIdOnDeleteObjectMask,
+        EcsIdOnDeleteTargetMask,
         EcsEntityIsId);  
 }
 
@@ -4012,7 +4080,8 @@ static
 void flecs_register_slot_of(ecs_iter_t *it) {
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
-        ecs_add_id(it->world, it->entities[i], EcsUnion);
+        ecs_add_id(it->world, it->entities[i], EcsDontFragment);
+        ecs_add_id(it->world, it->entities[i], EcsExclusive);
     }
 }
 
@@ -4186,20 +4255,28 @@ void flecs_disable_module(ecs_iter_t *it) {
 static
 void flecs_register_ordered_children(ecs_iter_t *it) {
     int32_t i;
-    for (i = 0; i < it->count; i ++) {
-        ecs_entity_t parent = it->entities[i];
-        const ecs_component_record_t *cr = flecs_components_ensure(
-            it->world, ecs_childof(parent));
-        if (cr->cache.tables.count != 0) {
-            char *str = ecs_id_str(it->world, ecs_childof(parent));
-            ecs_throw(ECS_INVALID_OPERATION, "cannot add OrderedChildren trait:"
-                " (ChildOf, %s) already in use", str);
-            ecs_os_free(str);
+    if (it->event == EcsOnAdd) {
+        for (i = 0; i < it->count; i ++) {
+            ecs_entity_t parent = it->entities[i];
+            ecs_component_record_t *cr = flecs_components_ensure(
+                it->world, ecs_childof(parent));
+            if (!(cr->flags & EcsIdOrderedChildren)) {
+                flecs_ordered_children_populate(it->world, cr);
+                cr->flags |= EcsIdOrderedChildren;
+            }
         }
-        ecs_assert(cr->flags & EcsIdOrderedChildren, ECS_INTERNAL_ERROR, NULL);
+    } else {
+        ecs_assert(it->event == EcsOnRemove, ECS_INTERNAL_ERROR, NULL);
+        for (i = 0; i < it->count; i ++) {
+            ecs_entity_t parent = it->entities[i];
+            ecs_component_record_t *cr = flecs_components_get(
+                it->world, ecs_childof(parent));
+            if (cr && (cr->flags & EcsIdOrderedChildren)) {
+                flecs_ordered_children_clear(cr);
+                cr->flags &= ~EcsIdOrderedChildren;
+            }
+        }
     }
-error:
-    return;
 }
 
 /* -- Bootstrapping -- */
@@ -4271,13 +4348,13 @@ ecs_table_t* flecs_bootstrap_component_table(
     /* Before creating table, manually set flags for ChildOf/Identifier, as this
      * can no longer be done after they are in use. */
     ecs_component_record_t *cr = flecs_components_ensure(world, EcsChildOf);
-    cr->flags |= EcsIdOnDeleteObjectDelete | EcsIdOnInstantiateDontInherit |
+    cr->flags |= EcsIdOnDeleteTargetDelete | EcsIdOnInstantiateDontInherit |
         EcsIdTraversable | EcsIdTag;
 
     /* Initialize id records cached on world */
     world->cr_childof_wildcard = flecs_components_ensure(world, 
         ecs_pair(EcsChildOf, EcsWildcard));
-    world->cr_childof_wildcard->flags |= EcsIdOnDeleteObjectDelete | 
+    world->cr_childof_wildcard->flags |= EcsIdOnDeleteTargetDelete | 
         EcsIdOnInstantiateDontInherit | EcsIdTraversable | EcsIdTag | EcsIdExclusive;
     cr = flecs_components_ensure(world, ecs_pair_t(EcsIdentifier, EcsWildcard));
     cr->flags |= EcsIdOnInstantiateDontInherit;
@@ -4765,7 +4842,7 @@ void flecs_bootstrap(
     ecs_observer(world, {
         .query.terms = {{ .id = EcsOrderedChildren }},
         .query.flags = EcsQueryMatchPrefab|EcsQueryMatchDisabled,
-        .events = {EcsOnAdd},
+        .events = {EcsOnAdd,  EcsOnRemove},
         .callback = flecs_register_ordered_children
     });
 
@@ -4862,6 +4939,8 @@ void flecs_bootstrap(
     ecs_add_pair(world, ecs_id(EcsComponent), EcsOnInstantiate, EcsDontInherit);
     ecs_add_pair(world, EcsOnDelete, EcsOnInstantiate, EcsDontInherit);
     ecs_add_pair(world, EcsUnion, EcsOnInstantiate, EcsDontInherit);
+    ecs_add_pair(world, EcsExclusive, EcsOnInstantiate, EcsDontInherit);
+    ecs_add_pair(world, EcsDontFragment, EcsOnInstantiate, EcsDontInherit);
 
     /* Acyclic/Traversable components */
     ecs_add_id(world, EcsIsA, EcsTraversable);
@@ -4998,7 +5077,7 @@ bool flecs_defer_begin(
 {
     flecs_poly_assert(world, ecs_world_t);
     flecs_poly_assert(stage, ecs_stage_t);
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
     (void)world;
     if (stage->defer < 0) return false;
     return (++ stage->defer) == 1;
@@ -5728,7 +5807,7 @@ void flecs_cmd_batch_for_entity(
 
     /* If destination table has new sparse components, make sure they're created
      * for the entity. */
-    if ((table->flags & EcsTableHasSparse) && added.count) {
+    if ((table->flags & (EcsTableHasSparse|EcsTableHasDontFragment)) && added.count) {
         flecs_sparse_on_add(
             world, table, ECS_RECORD_TO_ROW(r->row), 1, &added, true);
     }
@@ -5826,14 +5905,24 @@ void flecs_cmd_batch_for_entity(
         add_diff.added = added;
         add_diff.added_flags = diff->added_flags;
 
+        if (r->row & EcsEntityIsTraversable) {
+            /* Update monitors since we didn't do this in flecs_commit. Do this
+             * before calling flecs_notify_on_add() since this can trigger 
+             * prefab instantiation logic. When that happens, prefab children
+             * can be created for this instance which would mean that the table
+             * count of r->cr would always be >0.
+             * Since those tables are new, we don't have to invoke component 
+             * monitors since queries will have correctly matched them. */
+            ecs_assert(r->cr != NULL, ECS_INTERNAL_ERROR, NULL);
+            if (ecs_map_count(&r->cr->cache.index)) {
+                flecs_update_component_monitors(world, &added, NULL);
+            }
+        }
+
         flecs_defer_begin(world, world->stages[0]);
         flecs_notify_on_add(world, r->table, start_table,
             ECS_RECORD_TO_ROW(r->row), 1, &add_diff, 0, set_mask, true, false);
         flecs_defer_end(world, world->stages[0]);
-        if (r->row & EcsEntityIsTraversable) {
-            /* Update monitors since we didn't do this in flecs_commit. */
-            flecs_update_component_monitors(world, &added, NULL);
-        }
     }
 
     diff->added.array = added.array;
@@ -5850,7 +5939,7 @@ bool flecs_defer_end(
     flecs_poly_assert(world, ecs_world_t);
     flecs_poly_assert(stage, ecs_stage_t);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     if (stage->defer < 0) {
         /* Defer suspending makes it possible to do operations on the storage
@@ -6227,15 +6316,17 @@ void flecs_invoke_hook(
         tr = &dummy_tr;
     }
 
-    flecs_iter_init(world, &it, flecs_iter_cache_all);
+    ecs_entity_t dummy_src = 0;
+
     it.world = world;
     it.real_world = world;
     it.table = table;
-    it.trs[0] = tr;
+    it.trs = &tr;
     it.row_fields = !!(((ecs_component_record_t*)tr->hdr.cache)->flags & EcsIdIsSparse);
     it.ref_fields = it.row_fields;
     it.sizes = ECS_CONST_CAST(ecs_size_t*, &ti->size);
-    it.ids[0] = id;
+    it.ids = &id;
+    it.sources = &dummy_src;
     it.event = event;
     it.event_id = id;
     it.ctx = ti->hooks.ctx;
@@ -6245,7 +6336,6 @@ void flecs_invoke_hook(
     it.flags = EcsIterIsValid;
 
     hook(&it);
-    ecs_iter_fini(&it);
 
     world->stages[0]->defer = defer;
 }
@@ -6273,6 +6363,45 @@ void flecs_on_unparent(
     flecs_ordered_children_unparent(world, table, row, count);
 }
 
+bool flecs_sparse_on_add_cr(
+    ecs_world_t *world,
+    ecs_table_t *table,
+    int32_t row,
+    ecs_component_record_t *cr,
+    bool construct,
+    void **ptr_out)
+{
+    bool is_new = false;
+
+    if (cr && cr->flags & EcsIdIsSparse) {
+        void *result = NULL;
+        int32_t sparse_count = flecs_sparse_count(cr->sparse);
+
+        if (construct) {
+            result = flecs_component_sparse_insert(
+                world, cr, table, row);
+        } else {
+            result = flecs_component_sparse_emplace(
+                world, cr, table, row);
+        }
+
+        if (ptr_out)  {
+            *ptr_out = result;
+        }
+
+        if (cr->flags & EcsIdDontFragment) {
+            is_new = sparse_count != flecs_sparse_count(cr->sparse);
+            if (is_new) {
+                const ecs_entity_t *entities = ecs_table_entities(table);
+                ecs_record_t *r = flecs_entities_get(world, entities[row]);
+                r->row |= EcsEntityHasDontFragment;
+            }
+        }
+    }
+
+    return is_new;
+}
+
 bool flecs_sparse_on_add(
     ecs_world_t *world,
     ecs_table_t *table,
@@ -6287,21 +6416,10 @@ bool flecs_sparse_on_add(
     for (i = 0; i < added->count; i ++) {
         ecs_id_t id = added->array[i];
         ecs_component_record_t *cr = flecs_components_get(world, id);
-        
-        if (cr && cr->flags & EcsIdIsSparse) {
-            int32_t sparse_count = flecs_sparse_count(cr->sparse);
 
-            for (j = 0; j < count; j ++) {
-                if (construct) {
-                    flecs_component_sparse_insert(world, cr, table, row + j);
-                } else {
-                    flecs_component_sparse_emplace(world, cr, table, row + j);
-                }
-            }
-
-            if (cr->flags & EcsIdDontFragment) {
-                is_new |= sparse_count != flecs_sparse_count(cr->sparse);
-            }
+        for (j = 0; j < count; j ++) {
+            is_new |= flecs_sparse_on_add_cr(
+                world, table, row + j, cr, construct, NULL);
         }
     }
 
@@ -6344,7 +6462,7 @@ bool flecs_dont_fragment_on_remove(
             const ecs_entity_t *entities = ecs_table_entities(table);
             for (j = 0; j < count; j ++) {
                 ecs_entity_t e = entities[row + j];
-                if (flecs_component_sparse_get(cr, e)) {
+                if (flecs_component_sparse_has(cr, e)) {
                     return true;
                 }
             }
@@ -6371,8 +6489,7 @@ void flecs_entity_remove_non_fragmenting(
     while (cur) {
         ecs_assert(cur->flags & EcsIdIsSparse, ECS_INTERNAL_ERROR, NULL);
         if (cur->sparse && !(ecs_id_is_wildcard(cur->id))) {
-            void *ptr = flecs_sparse_get(cur->sparse, 0, e);
-            if (ptr) {
+            if (flecs_sparse_has(cur->sparse, e)) {
                 ecs_type_t type = { .count = 1, .array = &cur->id };
 
                 flecs_emit(world, world, 0, &(ecs_event_desc_t) {
@@ -6476,15 +6593,6 @@ void flecs_notify_on_add(
         if (sparse && (diff_flags & EcsTableHasSparse)) {
             if (flecs_sparse_on_add(world, table, row, count, added, construct)) {
                 diff_flags |= EcsTableHasOnAdd;
-            }
-
-            if (diff_flags & EcsTableHasDontFragment) {
-                int32_t i;
-                const ecs_entity_t *entities = ecs_table_entities(table);
-                for (i = row; i < (row + count); i ++) {
-                    ecs_record_t *r = flecs_entities_get(world, entities[i]);
-                    r->row |= EcsEntityHasDontFragment;
-                }
             }
         }
 
@@ -6728,6 +6836,8 @@ ecs_iter_t ecs_each_id(
 
     const ecs_world_t *world = ecs_get_world(stage);
 
+    flecs_check_exclusive_world_access_write(world);
+
     ecs_iter_t it = {
         .real_world = ECS_CONST_CAST(ecs_world_t*, world),
         .world = ECS_CONST_CAST(ecs_world_t*, stage),
@@ -6792,6 +6902,8 @@ ecs_iter_t ecs_children(
     ecs_check(stage != NULL, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_world_t *world = ecs_get_world(stage);
+
+    flecs_check_exclusive_world_access_read(world);
 
     ecs_iter_t it = {
         .real_world = ECS_CONST_CAST(ecs_world_t*, world),
@@ -7034,7 +7146,7 @@ ecs_entity_t flecs_new_id(
 {
     flecs_poly_assert(world, ecs_world_t);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     /* It is possible that the world passed to this function is a stage, so
      * make sure we have the actual world. Cast away const since this is one of
@@ -7042,21 +7154,10 @@ ecs_entity_t flecs_new_id(
      * since it is thread safe (uses atomic inc when in threading mode) */
     ecs_world_t *unsafe_world = ECS_CONST_CAST(ecs_world_t*, world);
 
-    ecs_entity_t entity;
-    if (unsafe_world->flags & EcsWorldMultiThreaded) {
-        /* When world is in multithreading mode, make sure OS API has threading 
-         * functions initialized */
-        ecs_assert(ecs_os_has_threading(), ECS_INVALID_OPERATION, 
-            "thread safe id creation unavailable: threading API not available");
+    ecs_assert(!(unsafe_world->flags & EcsWorldMultiThreaded),
+        ECS_INVALID_OPERATION, "cannot create entities in multithreaded mode");
 
-        /* Can't atomically increase number above max int */
-        ecs_assert(flecs_entities_max_id(unsafe_world) < UINT_MAX, 
-            ECS_INVALID_OPERATION, "thread safe ids exhausted");
-        entity = (ecs_entity_t)ecs_os_ainc(
-            (int32_t*)&flecs_entities_max_id(unsafe_world));
-    } else {
-        entity = flecs_entities_new_id(unsafe_world);
-    }
+    ecs_entity_t entity = flecs_entities_new_id(unsafe_world);
 
     ecs_assert(!unsafe_world->info.max_id || 
         ecs_entity_t_lo(entity) <= unsafe_world->info.max_id, 
@@ -7609,7 +7710,7 @@ ecs_entity_t ecs_new_low_id(
 
     ecs_stage_t *stage = flecs_stage_from_world(&world);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     if (world->flags & EcsWorldReadonly) {
         /* Can't issue new comp id while iterating when in multithreaded mode */
@@ -7637,19 +7738,6 @@ error:
     return 0;
 }
 
-ecs_entity_t ecs_new_w_id(
-    ecs_world_t *world,
-    ecs_id_t id)
-{
-    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(ecs_id_is_valid(world, id), ECS_INVALID_PARAMETER, NULL);
-    ecs_entity_t entity = ecs_new(world);
-    ecs_add_id(world, entity, id);
-    return entity;
-error:
-    return 0;
-}
-
 ecs_entity_t ecs_new_w_table(
     ecs_world_t *world,
     ecs_table_t *table)
@@ -7671,6 +7759,39 @@ ecs_entity_t ecs_new_w_table(
     };
 
     flecs_new_entity(world, entity, r, table, &table_diff, true, 0);
+
+    return entity;
+error:
+    return 0;
+}
+
+ecs_entity_t ecs_new_w_id(
+    ecs_world_t *world,
+    ecs_id_t id)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_id_is_valid(world, id), ECS_INVALID_PARAMETER, NULL);
+
+    ecs_stage_t *stage = flecs_stage_from_world(&world);
+
+    if (flecs_defer_cmd(stage)) {
+        ecs_assert(ecs_is_deferred(world), ECS_INTERNAL_ERROR, NULL);
+        ecs_entity_t e = ecs_new(world);
+        ecs_add_id(world, e, id);
+        return e;
+    }
+
+    ecs_table_diff_t table_diff = ECS_TABLE_DIFF_INIT;
+    ecs_table_t *table = flecs_table_traverse_add(
+        world, &world->store.root, &id, &table_diff);
+    
+    ecs_entity_t entity = flecs_new_id(world);
+    ecs_record_t *r = flecs_entities_get(world, entity);
+    flecs_new_entity(world, entity, r, table, &table_diff, true, 0);
+
+    flecs_defer_end(world, stage);
+
+    ecs_assert(!ecs_is_deferred(world), ECS_INTERNAL_ERROR, NULL);
 
     return entity;
 error:
@@ -8202,7 +8323,7 @@ const ecs_entity_t* ecs_bulk_init(
     ecs_check(desc->_canary == 0, ECS_INVALID_PARAMETER,
         "ecs_bulk_desc_t was not initialized to zero");
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     const ecs_entity_t *entities = desc->entities;
     int32_t count = desc->count;
@@ -8727,6 +8848,8 @@ void* ecs_get_mut_id(
 
     world = ecs_get_world(world);
 
+    flecs_check_exclusive_world_access_write(world);
+
     ecs_record_t *r = flecs_entities_get(world, entity);
     ecs_assert(r != NULL, ECS_INVALID_PARAMETER, NULL);
 
@@ -9146,7 +9269,7 @@ void ecs_enable_id(
         "add CanToggle trait to component");
 
     ecs_entity_t bs_id = id | ECS_TOGGLE;
-    ecs_add_id(world, entity, bs_id);
+    ecs_add_id((ecs_world_t*)stage, entity, bs_id);
 
     if (flecs_defer_enable(stage, entity, id, enable)) {
         return;
@@ -9221,7 +9344,7 @@ void ecs_set_child_order(
 
     flecs_stage_from_world(&world);
 
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     ecs_component_record_t *cr = flecs_components_get(
         world, ecs_childof(parent));
@@ -9529,6 +9652,7 @@ int32_t ecs_get_depth(
     ecs_entity_t rel)
 {
     ecs_check(ecs_is_valid(world, rel), ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_is_alive(world, entity), ECS_INVALID_PARAMETER, NULL);
     ecs_check(ecs_has_id(world, rel, EcsAcyclic), ECS_INVALID_PARAMETER, 
         "cannot safely determine depth for relationship that is not acyclic "
             "(add Acyclic property to relationship)");
@@ -9548,6 +9672,11 @@ bool ecs_is_valid(
     ecs_entity_t entity)
 {
     ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    #ifdef FLECS_DEBUG
+    world = ecs_get_world(world);
+    flecs_check_exclusive_world_access_read(world);
+    #endif
 
     /* 0 is not a valid entity id */
     if (!entity) {
@@ -9590,6 +9719,8 @@ bool ecs_is_alive(
 
     world = ecs_get_world(world);
 
+    flecs_check_exclusive_world_access_read(world);
+
     return flecs_entities_is_alive(world, entity);
 error:
     return false;
@@ -9607,6 +9738,8 @@ ecs_entity_t ecs_get_alive(
 
     /* Make sure we're not working with a stage */
     world = ecs_get_world(world);
+
+    flecs_check_exclusive_world_access_read(world);
 
     if (flecs_entities_is_alive(world, entity)) {
         return entity;
@@ -9637,6 +9770,8 @@ void ecs_make_alive(
 
     /* Const cast is safe, function checks for threading */
     world = ECS_CONST_CAST(ecs_world_t*, ecs_get_world(world));
+
+    flecs_check_exclusive_world_access_write(world);
 
     /* The entity index can be mutated while in staged/readonly mode, as long as
      * the world is not multithreaded. */
@@ -9716,6 +9851,8 @@ bool ecs_exists(
 
     world = ecs_get_world(world);
 
+    flecs_check_exclusive_world_access_read(world);
+
     return flecs_entities_exists(world, entity);
 error:
     return false;
@@ -9730,6 +9867,8 @@ void ecs_set_version(
         "cannot change entity generation when world is in readonly mode");
     ecs_assert(!(ecs_is_deferred(world)), ECS_INVALID_OPERATION, 
         "cannot change entity generation while world is deferred");
+
+    flecs_check_exclusive_world_access_write(world);
 
     flecs_entities_make_alive(world, entity_with_generation);
 
@@ -9751,6 +9890,8 @@ ecs_table_t* ecs_get_table(
     ecs_check(ecs_is_valid(world, entity), ECS_INVALID_PARAMETER, NULL);
     
     world = ecs_get_world(world);
+
+    flecs_check_exclusive_world_access_read(world);
 
     ecs_record_t *record = flecs_entities_get(world, entity);
     ecs_assert(record != NULL, ECS_INTERNAL_ERROR, NULL);
@@ -10306,13 +10447,16 @@ void flecs_reparent_name_index(
     int32_t offset,
     int32_t count) 
 {
-    ecs_assert(src != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(dst != NULL, ECS_INTERNAL_ERROR, NULL);
     if (!(dst->flags & EcsTableHasName)) {
         /* If destination table doesn't have a name, we don't need to update the
          * name index. Even if the src table had a name, the on_remove hook for
          * EcsIdentifier will remove the entity from the index. */
         return;
+    }
+
+    if (!src) {
+        src = &world->store.root;
     }
 
     ecs_pair_record_t *src_pair = src->_->childof_r;
@@ -11014,6 +11158,24 @@ bool ecs_id_is_wildcard(
            (first == EcsAny) || (second == EcsAny);
 }
 
+bool ecs_id_is_any(
+    ecs_id_t id)
+{
+    if (id == EcsAny) {
+        return true;
+    }
+
+    bool is_pair = ECS_IS_PAIR(id);
+    if (!is_pair) {
+        return false;
+    }
+
+    ecs_entity_t first = ECS_PAIR_FIRST(id);
+    ecs_entity_t second = ECS_PAIR_SECOND(id);
+
+    return (first == EcsAny) || (second == EcsAny);
+}
+
 bool ecs_id_is_valid(
     const ecs_world_t *world,
     ecs_id_t id)
@@ -11237,7 +11399,15 @@ void flecs_instantiate_slot(
 {
     if (base == slot_of) {
         /* Instance inherits from slot_of, add slot to instance */
-        ecs_add_pair(world, instance, slot, child);
+        ecs_component_record_t *cr = flecs_components_ensure(
+            world, ecs_pair(slot, child));
+        ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        ecs_record_t *r = flecs_entities_get(world, instance);
+        ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        flecs_sparse_on_add_cr(world, 
+            r->table, ECS_RECORD_TO_ROW(r->row), cr, true, NULL);
     } else {
         /* Slot is registered for other prefab, travel hierarchy
          * upwards to find instance that inherits from slot_of */
@@ -11589,15 +11759,20 @@ void flecs_instantiate_dont_fragment(
             if (flecs_component_sparse_has(cur, base)) {
                 void *base_ptr = flecs_component_sparse_get(cur, base);
                 const ecs_type_info_t *ti = cur->type_info;
+
+                ecs_record_t *r = flecs_entities_get(world, instance);
+
+                void *ptr = NULL;
+                flecs_sparse_on_add_cr(world, 
+                    r->table, ECS_RECORD_TO_ROW(r->row), cur, true, &ptr);
+
                 if (ti) {
-                    void *ptr = ecs_ensure_id(world, instance, cur->id);
+                    ecs_assert(ptr != NULL, ECS_INTERNAL_ERROR, NULL);
                     if (ti->hooks.copy) {
                         ti->hooks.copy(ptr, base_ptr, 1, ti);
                     } else {
                         ecs_os_memcpy(ptr, base_ptr, ti->size);
                     }
-                } else {
-                    ecs_add_id(world, instance, cur->id);
                 }
             }
         }
@@ -11688,17 +11863,6 @@ void flecs_instantiate(
 
 /* If term count is smaller than cache size, initialize with inline array,
  * otherwise allocate. */
-#define INIT_CACHE(it, stack, fields, f, T, count)\
-    if (!it->f && (fields & flecs_iter_cache_##f) && count) {\
-        it->f = flecs_stack_calloc_n(stack, T, count);\
-        it->priv_.cache.used |= flecs_iter_cache_##f;\
-    }
-
-/* If array is allocated, free it when finalizing the iterator */
-#define FINI_CACHE(it, f, T, count)\
-    if (it->priv_.cache.used & flecs_iter_cache_##f) {\
-        flecs_stack_free_n((void*)it->f, T, count);\
-    }
 
 void* flecs_iter_calloc(
     ecs_iter_t *it,
@@ -11721,7 +11885,7 @@ void flecs_iter_free(
 void flecs_iter_init(
     const ecs_world_t *world,
     ecs_iter_t *it,
-    ecs_flags8_t fields)
+    bool alloc_resources)
 {
     ecs_assert(!ECS_BIT_IS_SET(it->flags, EcsIterIsValid), 
         ECS_INTERNAL_ERROR, NULL);
@@ -11730,38 +11894,47 @@ void flecs_iter_init(
         ECS_CONST_CAST(ecs_world_t**, &world));
     ecs_stack_t *stack = &stage->allocators.iter_stack;
 
-    it->priv_.cache.used = 0;
-    it->priv_.cache.allocated = 0;
-    it->priv_.cache.stack_cursor = flecs_stack_get_cursor(stack);
+    it->priv_.stack_cursor = flecs_stack_get_cursor(stack);
 
-    INIT_CACHE(it, stack, fields, ids, ecs_id_t, it->field_count);
-    INIT_CACHE(it, stack, fields, sources, ecs_entity_t, it->field_count);
-    INIT_CACHE(it, stack, fields, trs, ecs_table_record_t*, it->field_count);
-    INIT_CACHE(it, stack, fields, variables, ecs_var_t, it->variable_count);
+    if (alloc_resources && it->field_count) {
+        ecs_assert(it->ids == NULL, ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(it->sources == NULL, ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(it->trs == NULL, ECS_INTERNAL_ERROR, NULL);
+
+        it->ids = flecs_stack_calloc_n(stack, ecs_id_t, it->field_count);
+        it->sources = flecs_stack_calloc_n(
+            stack, ecs_entity_t, it->field_count);
+        it->trs = flecs_stack_calloc_n(
+            stack, ecs_table_record_t*, it->field_count);
+    }
 }
 
 void ecs_iter_fini(
     ecs_iter_t *it)
 {
-    ECS_BIT_CLEAR(it->flags, EcsIterIsValid);
-
     if (it->fini) {
         it->fini(it);
     }
+
+    ECS_BIT_CLEAR(it->flags, EcsIterIsValid);
 
     ecs_world_t *world = it->world;
     if (!world) {
         return;
     }
 
-    FINI_CACHE(it, ids, ecs_id_t, it->field_count);
-    FINI_CACHE(it, sources, ecs_entity_t, it->field_count);
-    FINI_CACHE(it, trs, ecs_table_record_t*, it->field_count);
-    FINI_CACHE(it, variables, ecs_var_t, it->variable_count);
+    /* Make sure arrays are below stack page size, which means they don't have
+     * to get freed explicitly. */
+    ecs_assert(ECS_SIZEOF(ecs_id_t) * it->field_count < FLECS_STACK_PAGE_SIZE,
+        ECS_UNSUPPORTED, NULL);
+    ecs_assert(ECS_SIZEOF(ecs_entity_t) * it->field_count < FLECS_STACK_PAGE_SIZE,
+        ECS_UNSUPPORTED, NULL);
+    ecs_assert(ECS_SIZEOF(ecs_table_record_t*) * it->field_count < FLECS_STACK_PAGE_SIZE,
+        ECS_UNSUPPORTED, NULL);
 
     ecs_stage_t *stage = flecs_stage_from_world(&world);
     flecs_stack_restore_cursor(&stage->allocators.iter_stack, 
-        it->priv_.cache.stack_cursor);
+        it->priv_.stack_cursor);
 }
 
 /* --- Public API --- */
@@ -11777,10 +11950,28 @@ void* ecs_field_w_size(
         "invalid field index %d", index);
     ecs_check(index < it->field_count, ECS_INVALID_PARAMETER, 
         "field index %d out of bounds", index);
-    ecs_check(!size || ecs_field_size(it, index) == size || 
+    ecs_check(size != 0, ECS_INVALID_PARAMETER, 
+        "missing size for field %d", index);
+    ecs_check(ecs_field_size(it, index) == size || 
         !ecs_field_size(it, index),
             ECS_INVALID_PARAMETER, "mismatching size for field %d", index);
     (void)size;
+
+    if (it->ptrs && !it->offset) {
+        void *ptr = it->ptrs[index];
+        if (ptr) {
+#ifdef FLECS_DEBUG
+            /* Make sure that address in ptrs array is the same as what this 
+             * function would have returned if no ptrs array was set. */
+            void **temp_ptrs = it->ptrs;
+            ECS_CONST_CAST(ecs_iter_t*, it)->ptrs = NULL;
+            ecs_assert(ptr == ecs_field_w_size(it, size, index), 
+                ECS_INTERNAL_ERROR, NULL);
+            ECS_CONST_CAST(ecs_iter_t*, it)->ptrs = temp_ptrs;
+#endif
+            return ptr;
+        }
+    }
 
     const ecs_table_record_t *tr = it->trs[index];
     if (!tr) {
@@ -11818,10 +12009,6 @@ void* ecs_field_w_size(
     ecs_assert((row < table->data.count) ||
         (it->query && (it->query->flags & EcsQueryMatchEmptyTables)),
             ECS_INTERNAL_ERROR, NULL);
-
-    if (!size) {
-        size = (size_t)column->ti->size;
-    }
 
     return ECS_ELEM(column->data, (ecs_size_t)size, row);
 error:
@@ -12057,16 +12244,18 @@ char* ecs_iter_str(
         ecs_strbuf_list_pop(&buf, "\n");
     }
 
-    if (it->variable_count && it->variable_names) {
+    int32_t var_count = ecs_iter_get_var_count(it);
+
+    if (var_count) {
         int32_t actual_count = 0;
-        for (i = 0; i < it->variable_count; i ++) {
-            const char *var_name = it->variable_names[i];
+        for (i = 0; i < var_count; i ++) {
+            const char *var_name = ecs_iter_get_var_name(it, i);
             if (!var_name || var_name[0] == '_' || !strcmp(var_name, "this")) {
                 /* Skip anonymous variables */
                 continue;
             }
 
-            ecs_var_t var = it->variables[i];
+            ecs_var_t var = ecs_iter_get_vars(it)[i];
             if (!var.entity) {
                 /* Skip table variables */
                 continue;
@@ -12168,11 +12357,11 @@ ecs_entity_t ecs_iter_get_var(
 {
     ecs_check(var_id >= 0, ECS_INVALID_PARAMETER, 
         "invalid variable index %d", var_id);
-    ecs_check(var_id < it->variable_count, ECS_INVALID_PARAMETER,
+    ecs_check(var_id < ecs_iter_get_var_count(it), ECS_INVALID_PARAMETER,
         "variable index %d out of bounds", var_id);
-    ecs_check(it->variables != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_iter_get_vars(it) != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    ecs_var_t *var = &it->variables[var_id];
+    ecs_var_t *var = &ecs_iter_get_vars(it)[var_id];
     ecs_entity_t e = var->entity;
     if (!e) {
         ecs_table_t *table = var->range.table;
@@ -12201,11 +12390,11 @@ ecs_table_t* ecs_iter_get_var_as_table(
 {
     ecs_check(var_id >= 0, ECS_INVALID_PARAMETER, 
         "invalid variable index %d", var_id);
-    ecs_check(var_id < it->variable_count, ECS_INVALID_PARAMETER, 
+    ecs_check(var_id < ecs_iter_get_var_count(it), ECS_INVALID_PARAMETER, 
         "variable index %d out of bounds", var_id);
-    ecs_check(it->variables != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_iter_get_vars(it) != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    ecs_var_t *var = &it->variables[var_id];
+    ecs_var_t *var = &ecs_iter_get_vars(it)[var_id];
     ecs_table_t *table = var->range.table;
     if (!table && !var_id) {
         table = it->table;
@@ -12249,13 +12438,13 @@ ecs_table_range_t ecs_iter_get_var_as_range(
 {
     ecs_check(var_id >= 0, ECS_INVALID_PARAMETER, 
         "invalid variable index %d", var_id);
-    ecs_check(var_id < it->variable_count, ECS_INVALID_PARAMETER, 
+    ecs_check(var_id < ecs_iter_get_var_count(it), ECS_INVALID_PARAMETER, 
         "variable index %d out of bounds", var_id);
-    ecs_check(it->variables != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_iter_get_vars(it) != NULL, ECS_INVALID_PARAMETER, NULL);
 
     ecs_table_range_t result = { 0 };
 
-    ecs_var_t *var = &it->variables[var_id];
+    ecs_var_t *var = &ecs_iter_get_vars(it)[var_id];
     ecs_table_t *table = var->range.table;
     if (!table && !var_id) {
         table = it->table;
@@ -12285,23 +12474,80 @@ error:
     return (ecs_table_range_t){0};
 }
 
+const char* ecs_iter_get_var_name(
+    const ecs_iter_t *it,
+    int32_t var_id)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (var_id == 0) {
+        return "this";
+    }
+
+    const ecs_query_t *query = it->query;
+    ecs_check(query != NULL, ECS_INVALID_PARAMETER,
+        "can only obtain variable name for iterators that iterate query");
+    ecs_check(var_id < query->var_count, ECS_INVALID_PARAMETER,
+        "variable index out of range for query");
+
+    return query->vars[var_id];
+error:
+    return NULL;
+}
+
+int32_t ecs_iter_get_var_count(
+    const ecs_iter_t *it)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    if (it->query) {
+        return it->query->var_count;
+    }
+
+    return 1;
+error:
+    return 0;
+}
+
+ecs_var_t* ecs_iter_get_vars(
+    const ecs_iter_t *it)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    if (!it->query) {
+        return NULL;
+    }
+
+    if (it->chain_it) {
+        return ecs_iter_get_vars(it->chain_it);
+    }
+
+    return it->priv_.iter.query.vars;
+error:
+    return NULL;
+}
+
 void ecs_iter_set_var(
     ecs_iter_t *it,
     int32_t var_id,
     ecs_entity_t entity)
 {
     ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (it->chain_it) {
+        ecs_iter_set_var(it->chain_it, var_id, entity);
+        return;
+    }
+
     ecs_check(var_id >= 0, ECS_INVALID_PARAMETER, 
         "invalid variable index %d", var_id);
     ecs_check(var_id < FLECS_QUERY_VARIABLE_COUNT_MAX, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(var_id < it->variable_count, ECS_INVALID_PARAMETER, 
+    ecs_check(var_id < ecs_iter_get_var_count(it), ECS_INVALID_PARAMETER, 
         "variable index %d out of bounds", var_id);
     ecs_check(entity != 0, ECS_INVALID_PARAMETER, NULL);
     ecs_check(!(it->flags & EcsIterIsValid), ECS_INVALID_PARAMETER,
         "cannot constrain variable while iterating");
-    ecs_check(it->variables != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(ecs_iter_get_vars(it) != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_var_t *var = &it->variables[var_id];
+    ecs_var_t *var = &ecs_iter_get_vars(it)[var_id];
     var->entity = entity;
 
     ecs_record_t *r = flecs_entities_get(it->real_world, entity);
@@ -12339,9 +12585,15 @@ void ecs_iter_set_var_as_range(
     const ecs_table_range_t *range)
 {
     ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (it->chain_it) {
+        ecs_iter_set_var_as_range(it->chain_it, var_id, range);
+        return;
+    }
+
     ecs_check(var_id >= 0, ECS_INVALID_PARAMETER, 
         "invalid variable index %d", var_id);
-    ecs_check(var_id < it->variable_count, ECS_INVALID_PARAMETER, 
+    ecs_check(var_id < ecs_iter_get_var_count(it), ECS_INVALID_PARAMETER, 
         "variable index %d out of bounds", var_id);
     ecs_check(range != 0, ECS_INVALID_PARAMETER, NULL);
     ecs_check(range->table != NULL, ECS_INVALID_PARAMETER, NULL);
@@ -12353,7 +12605,7 @@ void ecs_iter_set_var_as_range(
     ecs_check(!(it->flags & EcsIterIsValid), ECS_INVALID_OPERATION, 
         "cannot set query variables while iterating");
 
-    ecs_var_t *var = &it->variables[var_id];
+    ecs_var_t *var = &ecs_iter_get_vars(it)[var_id];
     var->range = *range;
 
     if (range->count == 1) {
@@ -12376,7 +12628,32 @@ bool ecs_iter_var_is_constrained(
     ecs_iter_t *it,
     int32_t var_id)
 {
+    if (it->chain_it) {
+        return ecs_iter_var_is_constrained(it->chain_it, var_id);
+    }
+
     return (it->constrained_vars & (flecs_uto(uint64_t, 1 << var_id))) != 0;
+}
+
+uint64_t ecs_iter_get_group(
+    ecs_iter_t *it)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (it->chain_it) {
+        return ecs_iter_get_group(it->chain_it);
+    }
+
+    ecs_check(it->query != NULL, ECS_INVALID_PARAMETER, 
+        "ecs_iter_get_group must be called on iterator that iterates a query");
+    ecs_query_iter_t *qit = &it->priv_.iter.query;
+    ecs_check(qit->group != NULL, ECS_INVALID_PARAMETER,
+        "ecs_iter_get_group must be called on iterator that iterates a cached "
+        "query (query is uncached)");
+
+    return qit->group->info.id;
+error:
+    return 0;
 }
 
 static
@@ -12400,7 +12677,7 @@ ecs_iter_t ecs_page_iter(
     ecs_check(it->next != NULL, ECS_INVALID_PARAMETER, NULL);
 
     ecs_iter_t result = *it;
-    result.priv_.cache.stack_cursor = NULL; /* Don't copy allocator cursor */
+    result.priv_.stack_cursor = NULL; /* Don't copy allocator cursor */
 
     result.priv_.iter.page = (ecs_page_iter_t){
         .offset = offset,
@@ -12505,7 +12782,7 @@ ecs_iter_t ecs_worker_iter(
     ecs_check(index < count, ECS_INVALID_PARAMETER, NULL);
 
     ecs_iter_t result = *it;
-    result.priv_.cache.stack_cursor = NULL; /* Don't copy allocator cursor */
+    result.priv_.stack_cursor = NULL; /* Don't copy allocator cursor */
     
     result.priv_.iter.worker = (ecs_worker_iter_t){
         .index = index,
@@ -14285,6 +14562,14 @@ void flecs_emit(
 
     ecs_event_id_record_t *iders[5] = {0};
 
+    /* Collect overridden ids so we can emit OnSet as last step */
+    int32_t override_count = 0;
+    ecs_id_t override_ids[256];
+    ecs_component_record_t *override_crs[256];
+    const ecs_table_record_t *override_trs[256];
+    ecs_size_t override_sizes[256];
+    ecs_table_record_t dummy_tr;
+
     if (count && can_forward && has_observed) {
         flecs_emit_propagate_invalidate(world, table, offset, count);
     }
@@ -14305,8 +14590,16 @@ repeat_event:
         ecs_component_record_t *cr = NULL;
         const ecs_type_info_t *ti = NULL;
         ecs_id_t id = id_array[i];
-        ecs_assert(id == EcsAny || !ecs_id_is_wildcard(id), 
-            ECS_INVALID_PARAMETER, "cannot emit wildcard ids");
+
+        /* If id is wildcard this could be a remove(Rel, *) call for a 
+         * DontFragment component (for regular components this gets handled by
+         * the table graph which returns a vector with removed ids).
+         * This will be handled at a higher level than flecs_emit, so we can 
+         * ignore the wildcard */
+        if (id != EcsAny && ecs_id_is_wildcard(id)) {
+            continue;
+        }
+
         int32_t ider_i, ider_count = 0;
         bool is_pair = ECS_IS_PAIR(id);
         void *override_ptr = NULL;
@@ -14334,6 +14627,8 @@ repeat_event:
 
         ecs_flags32_t cr_flags = cr->flags;
         dont_fragment = cr_flags & EcsIdDontFragment;
+
+        ti = cr->type_info;
 
         /* Check if this id is a pair of an traversable relationship. If so, we 
          * may have to forward ids from the pair's target. */
@@ -14378,7 +14673,6 @@ repeat_event:
 
             if (id_can_override && !(cr_flags & EcsIdOnInstantiateDontInherit)) {
                 /* Initialize overridden components with value from base */
-                ti = cr->type_info;
                 if (ti) {
                     int32_t base_column = ecs_search_relation(world, table, 
                         0, id, EcsIsA, EcsUp, &base, NULL, &base_tr);
@@ -14439,7 +14733,7 @@ repeat_event:
 
         ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
         const ecs_table_record_t *tr = flecs_component_get_table(cr, table);
-        ecs_table_record_t dummy_tr = {
+        dummy_tr = (ecs_table_record_t){
             .hdr.cache = (ecs_table_cache_t*)cr,
             .hdr.table = table,
             .index = -1,
@@ -14467,11 +14761,11 @@ repeat_event:
 
         if (count) {
             storage_i = tr->column;
-            bool is_sparse = cr->flags & EcsIdIsSparse;
 
-            if (!ecs_id_is_wildcard(id) && (storage_i != -1 || is_sparse)) {
+            if (!ecs_id_is_wildcard(id) && (storage_i != -1 || ti)) {
+                bool is_sparse = cr->flags & EcsIdIsSparse;
+                ecs_size_t size = ti->size;
                 void *ptr;
-                ecs_size_t size = cr->type_info->size;
 
                 if (is_sparse) {
                     ecs_assert(count == 1, ECS_UNSUPPORTED, 
@@ -14499,28 +14793,15 @@ repeat_event:
                          * operation, generate an OnSet event as this is the 
                          * first time this value is observed for the entity. */
                         if (override_base_added) {
-                            ecs_event_id_record_t *iders_set[5] = {0};
-                            int32_t ider_set_i, ider_set_count = 
-                                flecs_event_observers_get(er_onset, id, iders_set);
-                            for (ider_set_i = 0; ider_set_i < ider_set_count; ider_set_i ++) {
-                                ecs_event_id_record_t *ider = iders_set[ider_set_i];
-                                flecs_observers_invoke(
-                                    world, &ider->self, &it, table, 0);
-                                ecs_assert(it.event_cur == evtx, 
-                                    ECS_INTERNAL_ERROR, NULL);
-                                flecs_observers_invoke(
-                                    world, &ider->self_up, &it, table, 0);
-                                ecs_assert(it.event_cur == evtx, 
-                                    ECS_INTERNAL_ERROR, NULL);
-                            }
+                            override_ids[override_count] = id;
+                            override_crs[override_count] = cr;
+                            override_trs[override_count] = tr;
+                            override_sizes[override_count] = size;
+                            override_count ++;
                         }
                     } else if (er_onset && it.other_table && 
                             it.other_table->type.count) 
                     {
-                        /* If an override was removed, this re-exposes the
-                         * overridden component. Because this causes the actual
-                         * (now inherited) value of the component to change, an
-                         * OnSet event must be emitted for the base component.*/
                         ecs_assert(event == EcsOnRemove, ECS_INTERNAL_ERROR, NULL);
                         ecs_event_id_record_t *iders_set[5] = {0};
                         int32_t ider_set_i, ider_set_count = 
@@ -14581,6 +14862,50 @@ repeat_event:
         er = wcer;
         it.event = event;
         goto repeat_event;
+    }
+
+    if (override_count) {
+        it.sources[0] = 0;
+        it.up_fields = 0;
+
+        for (i = 0; i < override_count; i ++) {
+            ecs_id_t id = override_ids[i];
+            const ecs_table_record_t *tr = override_trs[i];
+
+            if (tr == &dummy_tr) {
+                dummy_tr = (ecs_table_record_t){
+                    .hdr.cache = (ecs_table_cache_t*)override_crs[i],
+                    .hdr.table = table,
+                    .index = -1,
+                    .column = -1,
+                    .count = 0
+                };
+            }
+
+            it.trs[0] = tr;
+            ECS_CONST_CAST(int32_t*, it.sizes)[0] = override_sizes[i];
+            it.event_id = id;
+            it.ids[0] = id;
+
+            ecs_event_id_record_t *iders_set[5] = {0};
+            int32_t ider_set_i, ider_set_count = 
+                flecs_event_observers_get(er_onset, id, iders_set);
+            if (!ider_set_count) {
+                continue;
+            }
+
+            for (ider_set_i = 0; ider_set_i < ider_set_count; ider_set_i ++) {
+                ecs_event_id_record_t *ider = iders_set[ider_set_i];
+                flecs_observers_invoke(
+                    world, &ider->self, &it, table, 0);
+                ecs_assert(it.event_cur == evtx, 
+                    ECS_INTERNAL_ERROR, NULL);
+                flecs_observers_invoke(
+                    world, &ider->self_up, &it, table, 0);
+                ecs_assert(it.event_cur == evtx, 
+                    ECS_INTERNAL_ERROR, NULL);
+            }
+        }
     }
 
 error:
@@ -15150,6 +15475,7 @@ void flecs_multi_observer_invoke(
             /* The target table matches but the entity hasn't moved to it yet. 
              * Now match the not_query, which will populate the iterator with
              * data from the table the entity is still stored in. */
+            user_it.flags |= EcsIterSkip; /* Prevent change detection on fini */
             ecs_iter_fini(&user_it);
             match = ecs_query_has_table(impl->not_query, prev_table, &user_it);
 
@@ -15173,6 +15499,9 @@ void flecs_multi_observer_invoke(
         if (impl->flags & EcsObserverIsMonitor) {
             ecs_iter_t table_it;
             if (ecs_query_has_table(o->query, prev_table, &table_it)) {
+                /* Prevent change detection on fini */
+                user_it.flags |= EcsIterSkip;
+                table_it.flags |= EcsIterSkip;
                 ecs_iter_fini(&table_it);
                 ecs_iter_fini(&user_it);
                 goto done;
@@ -15214,6 +15543,7 @@ void flecs_multi_observer_invoke(
             user_it.callback(&user_it);
         }
 
+        user_it.flags |= EcsIterSkip; /* Prevent change detection on fini */
         ecs_iter_fini(&user_it);
 
         ecs_table_unlock(it->world, table);
@@ -15636,6 +15966,7 @@ ecs_observer_t* flecs_observer_init(
 
     flecs_poly_init(impl, ecs_observer_t);
     ecs_observer_t *o = &impl->pub;
+    o->world = world;
     impl->dtor = flecs_observer_poly_fini;
 
     /* Make writeable copy of query desc so that we can set name. This will
@@ -15645,22 +15976,23 @@ ecs_observer_t* flecs_observer_init(
     query_desc.entity = 0;
     query_desc.cache_kind = EcsQueryCacheNone;
 
-    ecs_query_t dummy_query, *query = NULL;
-
-    /* Temporary arrays for dummy query */
-    ecs_term_t terms[FLECS_TERM_COUNT_MAX] = {0};
-    ecs_size_t sizes[FLECS_TERM_COUNT_MAX] = {0};
-    ecs_id_t ids[FLECS_TERM_COUNT_MAX] = {0};
-    dummy_query = (ecs_query_t){
-        .terms = terms,
-        .sizes = sizes,
-        .ids = ids
-    };
+    ecs_query_t *query = NULL;
     
     /* Only do optimization when not in sanitized mode. This ensures that the
      * behavior is consistent between observers with and without queries, as
      * both paths will be exercised in unit tests. */
 #ifndef FLECS_SANITIZE
+    /* Temporary arrays for dummy query */
+    ecs_term_t terms[FLECS_TERM_COUNT_MAX] = {0};
+    ecs_size_t sizes[FLECS_TERM_COUNT_MAX] = {0};
+    ecs_id_t ids[FLECS_TERM_COUNT_MAX] = {0};
+
+    ecs_query_t dummy_query = {
+        .terms = terms,
+        .sizes = sizes,
+        .ids = ids
+    };
+
     if (desc->events[0] != EcsMonitor) {
         if (flecs_query_finalize_simple(world, &dummy_query, &query_desc)) {
             bool trivial_observer = (dummy_query.term_count == 1) && 
@@ -15823,7 +16155,11 @@ ecs_entity_t ecs_observer_init(
 
     EcsPoly *poly = flecs_poly_bind(world, entity, ecs_observer_t);
     if (!poly->poly) {
-        ecs_observer_t *o = flecs_observer_init(world, entity, desc);
+        ecs_observer_t *o = flecs_observer_init(world, entity, desc);\
+        if (!o) {
+            goto error;
+        }
+
         ecs_assert(o->entity == entity, ECS_INTERNAL_ERROR, NULL);
         poly->poly = o;
 
@@ -15918,6 +16254,7 @@ void flecs_observer_fini(
 {
     ecs_assert(o != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_world_t *world = o->world;
+
     flecs_poly_assert(world, ecs_world_t);
     ecs_observer_impl_t *impl = flecs_observer_impl(o);
 
@@ -16126,17 +16463,6 @@ ecs_entity_t flecs_get_delete_action(
 }
 
 static
-void flecs_update_monitors_for_delete(
-    ecs_world_t *world,
-    ecs_id_t id)
-{
-    flecs_update_component_monitors(world, NULL, &(ecs_type_t){
-        .array = (ecs_id_t[]){id},
-        .count = 1
-    });
-}
-
-static
 void flecs_id_mark_for_delete(
     ecs_world_t *world,
     ecs_component_record_t *cr,
@@ -16187,22 +16513,42 @@ void flecs_id_mark_for_delete(
         }
     }
 
-    /* Signal query cache monitors */
-    flecs_update_monitors_for_delete(world, id);
-
-    /* If id is a wildcard pair, update cache monitors for non-wildcard ids */
+    /* Flag component records for deletion */
     if (ecs_id_is_wildcard(id)) {
         ecs_assert(ECS_HAS_ID_FLAG(id, PAIR), ECS_INTERNAL_ERROR, NULL);
         ecs_component_record_t *cur = cr;
         if (ECS_PAIR_SECOND(id) == EcsWildcard) {
             while ((cur = flecs_component_first_next(cur))) {
-                flecs_update_monitors_for_delete(world, cur->id);
+                cur->flags |= EcsIdMarkedForDelete;
             }
         } else {
+            /* Iterating all pairs for relationship target */
             ecs_assert(ECS_PAIR_FIRST(id) == EcsWildcard, 
                 ECS_INTERNAL_ERROR, NULL);
             while ((cur = flecs_component_second_next(cur))) {
-                flecs_update_monitors_for_delete(world, cur->id);
+                cur->flags |= EcsIdMarkedForDelete;
+
+                /* If relationship is traversable and is removed upon deletion
+                 * of a target, we may have to rematch queries. If a query 
+                 * matched for example (IsA, A) -> (IsA, B) -> Position, and 
+                 * B is deleted, Position would no longer be reachable from 
+                 * tables that have (IsA, B). */
+                if (cur->flags & EcsIdTraversable) {
+                    /* If tables with (R, target) are deleted anyway we don't
+                     * need to rematch. Since this will happen recursively it is
+                     * guaranteed that queries cannot have tables that reached a
+                     * component through the deleted entity. */
+                    if (!(cur->flags & EcsIdOnDeleteTargetDelete)) {
+                        /* Only bother if tables have relationship. */
+                        if (ecs_map_count(&cur->cache.index)) {
+                            flecs_update_component_monitors(world, NULL, 
+                                &(ecs_type_t){
+                                    .array = (ecs_id_t[]){cur->id},
+                                    .count = 1
+                                });
+                        }
+                    }
+                }
             }
         }
     }
@@ -16362,9 +16708,9 @@ void flecs_on_delete_clear_sparse(
             continue;
         }
 
-        if (cur->flags & EcsIdOnDeleteObjectDelete) {
+        if (cur->flags & EcsIdOnDeleteTargetDelete) {
             flecs_component_delete_sparse(world, cur);
-        } else if (cur->flags & EcsIdOnDeleteObjectPanic) {
+        } else if (cur->flags & EcsIdOnDeleteTargetPanic) {
             char *id_str = ecs_id_str(world, cur->id);
             ecs_err("(OnDelete, Panic) constraint violated while "
                 "deleting %s", id_str);
@@ -18529,18 +18875,14 @@ void ecs_set_hooks_id(
     }
 
     /* Set default copy ctor, move ctor and merge */
-    if (!h->copy_ctor) {
-        if(flags & ECS_TYPE_HOOK_COPY_ILLEGAL || flags & ECS_TYPE_HOOK_CTOR_ILLEGAL) {
-            flags |= ECS_TYPE_HOOK_COPY_CTOR_ILLEGAL;
-        } else if(h->copy) {
+    if (!h->copy_ctor && !(flags & ECS_TYPE_HOOK_COPY_CTOR_ILLEGAL)) {
+        if (h->copy) {
             ti->hooks.copy_ctor = flecs_default_copy_ctor;
         }
     }
 
-    if (!h->move_ctor) {
-        if(flags & ECS_TYPE_HOOK_MOVE_ILLEGAL || flags & ECS_TYPE_HOOK_CTOR_ILLEGAL) {
-            flags |= ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL;
-        } else if (h->move) {
+    if (!h->move_ctor && !(flags & ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL)) {
+        if (h->move) {
             ti->hooks.move_ctor = flecs_default_move_ctor;
         }
     }
@@ -19515,9 +19857,7 @@ void flecs_eval_component_monitor(
         for (i = 0; i < count; i ++) {
             ecs_query_t *q = elems[i];
             flecs_poly_assert(q, ecs_query_t);
-            flecs_query_cache_notify(world, q, &(ecs_query_cache_event_t) {
-                .kind = EcsQueryTableRematch
-            });
+            flecs_query_rematch(world, q);
         }
     }
 
@@ -19622,6 +19962,7 @@ void flecs_update_component_monitor_w_array(
     int i;
     for (i = 0; i < ids->count; i ++) {
         ecs_entity_t id = ids->array[i];
+
         if (ECS_HAS_ID_FLAG(id, PAIR)) {
             flecs_monitor_mark_dirty(world, 
                 ecs_pair(ECS_PAIR_FIRST(id), EcsWildcard));
@@ -19812,7 +20153,6 @@ void flecs_world_allocators_init(
     ecs_map_params_init(&a->query_table_list, &world->allocator);
 
     flecs_ballocator_init_t(&a->query_table, ecs_query_cache_table_t);
-    flecs_ballocator_init_t(&a->query_table_match, ecs_query_cache_table_match_t);
     flecs_ballocator_init_n(&a->graph_edge_lo, ecs_graph_edge_t, FLECS_HI_COMPONENT_ID);
     flecs_ballocator_init_t(&a->graph_edge, ecs_graph_edge_t);
     flecs_ballocator_init_t(&a->id_record, ecs_component_record_t);
@@ -19833,7 +20173,6 @@ void flecs_world_allocators_fini(
     ecs_map_params_fini(&a->ptr);
     ecs_map_params_fini(&a->query_table_list);
     flecs_ballocator_fini(&a->query_table);
-    flecs_ballocator_fini(&a->query_table_match);
     flecs_ballocator_fini(&a->graph_edge_lo);
     flecs_ballocator_fini(&a->graph_edge);
     flecs_ballocator_fini(&a->id_record);
@@ -19995,6 +20334,9 @@ ecs_world_t *ecs_mini(void) {
     ecs_set_os_api_impl();
 #endif
     ecs_os_init();
+
+    ecs_assert(ECS_ALIGNOF(ecs_query_triv_cache_match_t) == 
+               ECS_ALIGNOF(ecs_query_cache_match_t), ECS_INTERNAL_ERROR, NULL);
 
     ecs_trace("#[bold]bootstrapping world");
     ecs_log_push();
@@ -20512,8 +20854,6 @@ void flecs_increment_table_version(
 
     world->table_version[table->id & ECS_TABLE_VERSION_ARRAY_BITMASK] ++;
     table->version ++;
-
-    return;
 }
 
 uint32_t flecs_get_table_version_fast(
@@ -20522,6 +20862,29 @@ uint32_t flecs_get_table_version_fast(
 {
     flecs_poly_assert(world, ecs_world_t);
     return world->table_version[table_id & ECS_TABLE_VERSION_ARRAY_BITMASK];
+}
+
+void flecs_increment_table_column_version(
+    ecs_world_t *world,
+    ecs_table_t *table)
+{
+    flecs_poly_assert(world, ecs_world_t);
+    ecs_assert(table != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    int32_t index = table->id & ECS_TABLE_VERSION_ARRAY_BITMASK;
+    world->table_column_version[index] ++;
+    if (world->table_column_version[index] == UINT32_MAX) {
+        /* Skip sentinel value */
+        world->table_column_version[index] = 0;
+    }
+}
+
+uint32_t flecs_get_table_column_version(
+    const ecs_world_t *world,
+    const uint64_t table_id)
+{
+    flecs_poly_assert(world, ecs_world_t);
+    return world->table_column_version[table_id & ECS_TABLE_VERSION_ARRAY_BITMASK];
 }
 
 static int32_t flecs_component_ids_last_index = 0;
@@ -20585,7 +20948,9 @@ void flecs_component_ids_set(
     ecs_vec_get_t(&world->component_ids, ecs_entity_t, index)[0] = component;
 }
 
-void flecs_check_exclusive_world_access(
+#ifdef FLECS_DEBUG
+
+void flecs_check_exclusive_world_access_write(
     const ecs_world_t *world)
 {
     flecs_poly_assert(world, ecs_world_t);
@@ -20597,12 +20962,61 @@ void flecs_check_exclusive_world_access(
     ecs_os_thread_id_t thr_self = ecs_os_thread_self();
     (void)thr_self;
 
-    ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
-        ECS_INVALID_OPERATION,
-        "invalid access to world by thread %" PRIu64 " "
-            "(thread %" PRIu64 " has exclusive access)",
-                thr_self, world->exclusive_access);
+    if (world->exclusive_access == UINT64_MAX) {
+        ecs_throw(ECS_ACCESS_VIOLATION,
+            "invalid access: world is locked for write operations");
+    } else 
+    if (world->exclusive_thread_name) {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "thread %" PRIu64 " (%s) has exclusive access",
+                    thr_self, world->exclusive_access,
+                    world->exclusive_thread_name);
+    } else {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "thread %" PRIu64 " has exclusive access",
+                    thr_self, world->exclusive_access);
+    }
+error:
+    return;
 }
+
+void flecs_check_exclusive_world_access_read(
+    const ecs_world_t *world)
+{
+    flecs_poly_assert(world, ecs_world_t);
+
+    if (!world->exclusive_access) {
+        return; /* Exclusive access is not enabled */
+    }
+
+    if (world->exclusive_access == UINT64_MAX) {
+        return; /* World is locked, so read access is allowed */
+    }
+
+    ecs_os_thread_id_t thr_self = ecs_os_thread_self();
+    (void)thr_self;
+
+    if (world->exclusive_thread_name) {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "(thread %" PRIu64 " (%s) has exclusive access)",
+                    thr_self, world->exclusive_access,
+                    world->exclusive_thread_name);
+    } else {
+        ecs_assert(world->exclusive_access == ecs_os_thread_self(), 
+            ECS_ACCESS_VIOLATION,
+            "invalid access to world by thread %" PRIu64 ": "
+                "thread %" PRIu64 " has exclusive access",
+                    thr_self, world->exclusive_access);
+    }
+}
+
+#endif
 
 static
 void flecs_process_empty_queries(
@@ -20768,20 +21182,40 @@ void ecs_shrink(
 }
 
 void ecs_exclusive_access_begin(
-    ecs_world_t *world)
+    ecs_world_t *world,
+    const char *thread_name)
 {
     flecs_poly_assert(world, ecs_world_t);
 
+    /* If world was locked, one thread can get exclusive access */
+    if (world->exclusive_access == UINT64_MAX) {
+        world->exclusive_access = 0;
+    }
+
     ecs_assert(!world->exclusive_access, ECS_INVALID_OPERATION,
-        "cannot begin exclusive access: world already in exclusive mode");
+        "cannot begin exclusive access: world already in exclusive mode "
+        "by thread %" PRIu64 " (%s)", 
+        world->exclusive_access, 
+        world->exclusive_thread_name 
+            ? world->exclusive_thread_name 
+            : "no thread name");
 
     world->exclusive_access = ecs_os_thread_self();
+    world->exclusive_thread_name = thread_name;
 }
 
 void ecs_exclusive_access_end(
-    ecs_world_t *world)
+    ecs_world_t *world,
+    bool lock_world)
 {
     flecs_poly_assert(world, ecs_world_t);
+
+    /* If the world is locked (not exclusively accessed by a specific thread)
+     * this allows for unlocking the world without first calling access_begin */
+    if (world->exclusive_access == UINT64_MAX) {
+        world->exclusive_access = 0;
+        return;
+    }
 
     ecs_assert(world->exclusive_access != 0, ECS_INVALID_OPERATION,
         "cannot end exclusive access: world is not in exclusive mode");
@@ -20792,7 +21226,13 @@ void ecs_exclusive_access_end(
     ecs_assert(world->exclusive_access == thr_self, ECS_INVALID_OPERATION,
         "cannot end exclusive access from thread that does not have exclusive access");
 
-    world->exclusive_access = 0;
+    if (!lock_world) {
+        world->exclusive_access = 0;
+    } else {
+        /* Prevent any mutations on the world */
+        world->exclusive_access = UINT64_MAX;
+        world->exclusive_thread_name = "locked world";
+    }
 }
 
 ecs_entity_t ecs_set_with(
@@ -21256,7 +21696,7 @@ void MonitorAlertInstances(ecs_iter_t *it) {
                         /* If a message was already generated, only regenerate if
                         * query has multiple variables. Variable values could have 
                         * changed, this ensures the message remains up to date. */
-                        generate_message = rit.variable_count > 1;
+                        generate_message = ecs_iter_get_var_count(&rit) > 1;
                     }
                 }
 
@@ -24351,11 +24791,12 @@ int ecs_http_server_request(
 
     int32_t len = method_len + req_len + content_length_len + body_len + 
         http_ver_len;
+
+    len += 3;
+
     if (len >= 1024) {
         reqstr = ecs_os_malloc(len);
     }
-
-    len += 3;
 
     char *ptr = reqstr;
     ecs_os_memcpy(ptr, method, method_len); ptr += method_len;
@@ -28179,7 +28620,7 @@ void ecs_system_activate(
     const ecs_system_t *system_data);
 
 /* Internal function to run a system */
-ecs_entity_t flecs_run_intern(
+ecs_entity_t flecs_run_system(
     ecs_world_t *world,
     ecs_stage_t *stage,
     ecs_entity_t system,
@@ -29934,6 +30375,7 @@ void flecs_ballocator_fini(
     ecs_block_allocator_t *ba)
 {
     ecs_assert(ba != NULL, ECS_INTERNAL_ERROR, NULL);
+    (void)ba;
 
 #ifndef FLECS_USE_OS_ALLOC
 #ifdef FLECS_SANITIZE
@@ -33137,11 +33579,19 @@ void ecs_vec_reclaim(
     int32_t count = v->count;
     if (count < v->size) {
         if (count) {
+            /* Don't use realloc as it can return the same size buffer when the
+             * new size is smaller than the existing size, which defeats the
+             * purpose of reclaim. */
             if (allocator) {
-                v->array = flecs_realloc(
-                    allocator, size * count, size * v->size, v->array);
+                void *new_array = flecs_alloc(allocator, count * size);
+                ecs_os_memcpy(new_array, v->array, size * count);
+                flecs_free(allocator, v->size * size, v->array);
+                v->array = new_array;
             } else {
-                v->array = ecs_os_realloc(v->array, size * count);
+                void *new_array = ecs_os_malloc(size * count);
+                ecs_os_memcpy(new_array, v->array, size * count);
+                ecs_os_free(v->array);
+                v->array = new_array;
             }
             v->size = count;
         } else {
@@ -33417,8 +33867,9 @@ int flecs_query_set_caching_policy(
     const ecs_query_desc_t *desc)
 {
     ecs_query_cache_kind_t kind = desc->cache_kind;
-    bool group_order_by = desc->group_by || desc->group_by_callback || 
-            desc->order_by || desc->order_by_callback;
+    bool require_caching = desc->group_by || desc->group_by_callback || 
+            desc->order_by || desc->order_by_callback || 
+            (desc->flags & EcsQueryDetectChanges);
 
     /* If the query has a Cascade term it'll use group_by */
     int32_t i, term_count = impl->pub.term_count;
@@ -33426,13 +33877,13 @@ int flecs_query_set_caching_policy(
     for (i = 0; i < term_count; i ++) {
         const ecs_term_t *term = &terms[i];
         if (term->src.id & EcsCascade) {
-            group_order_by = true;
+            require_caching = true;
             break;
         }
     }
 
 #ifdef FLECS_DEFAULT_TO_UNCACHED_QUERIES
-    if (kind == EcsQueryCacheDefault && !group_order_by) {
+    if (kind == EcsQueryCacheDefault && !require_caching) {
         kind = EcsQueryCacheNone;
     }
 #endif
@@ -33440,7 +33891,7 @@ int flecs_query_set_caching_policy(
     /* If caching policy is default, try to pick a policy that does the right
      * thing in most cases. */
     if (kind == EcsQueryCacheDefault) {
-        if (desc->entity || group_order_by) {
+        if (desc->entity || require_caching) {
             /* If the query is created with an entity handle (typically 
              * indicating that the query is named or belongs to a system) the
              * chance is very high that the query will be reused, so enable
@@ -33459,8 +33910,9 @@ int flecs_query_set_caching_policy(
     /* Don't cache query, even if it has cacheable terms */
     if (kind == EcsQueryCacheNone) {
         impl->pub.cache_kind = EcsQueryCacheNone;
-        if (group_order_by && !(impl->pub.flags & EcsQueryNested)) {
-            ecs_err("cannot create uncached query with group_by/order_by");
+        if (require_caching && !(impl->pub.flags & EcsQueryNested)) {
+            ecs_err("cannot create uncached query with "
+                "group_by/order_by/change detection");
             return -1;
         }
         return 0;
@@ -33492,7 +33944,7 @@ int flecs_query_set_caching_policy(
              * if the cacheable part of the query contains not just not/optional
              * terms, as this would build a cache that contains all tables. */
             int32_t not_optional_terms = 0, cacheable_terms = 0;
-            if (!group_order_by) {
+            if (!require_caching) {
                 for (i = 0; i < term_count; i ++) {
                     const ecs_term_t *term = &terms[i];
                     if (term->flags_ & EcsTermIsCacheable) {
@@ -33504,7 +33956,7 @@ int flecs_query_set_caching_policy(
                 }
             }
 
-            if (group_order_by || cacheable_terms != not_optional_terms) {
+            if (require_caching || cacheable_terms != not_optional_terms) {
                 impl->pub.cache_kind = EcsQueryCacheAuto;
             } else {
                 impl->pub.cache_kind = EcsQueryCacheNone;
@@ -33523,6 +33975,12 @@ int flecs_query_create_cache(
     ecs_query_t *q = &impl->pub;
     if (flecs_query_set_caching_policy(impl, desc)) {
         return -1;
+    }
+
+    if (q->cache_kind != EcsQueryCacheNone) {
+        flecs_check_exclusive_world_access_write(impl->pub.real_world);
+    } else {
+        flecs_check_exclusive_world_access_read(impl->pub.real_world);
     }
 
     if ((q->cache_kind != EcsQueryCacheNone) && !q->entity) {
@@ -33724,8 +34182,6 @@ ecs_query_t* ecs_query_init(
     ecs_world_t *world_arg = world;
     ecs_stage_t *stage = flecs_stage_from_world(&world);
 
-    flecs_check_exclusive_world_access(world);
-
     ecs_query_impl_t *result = flecs_bcalloc(&stage->allocators.query_impl);
     flecs_poly_init(result, ecs_query_t);
     
@@ -33733,6 +34189,8 @@ ecs_query_t* ecs_query_init(
     ecs_entity_t entity = const_desc->entity;
 
     if (entity) {
+        flecs_check_exclusive_world_access_write(world);
+
         /* Remove existing query if entity has one */
         bool deferred = false;
         if (ecs_is_deferred(world)) {
@@ -33930,6 +34388,73 @@ const ecs_query_t* ecs_query_get(
     } else {
         flecs_poly_assert(poly_comp->poly, ecs_query_t);
         return poly_comp->poly;
+    }
+}
+
+void ecs_iter_set_group(
+    ecs_iter_t *it,
+    uint64_t group_id)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it->next == ecs_query_next, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(!(it->flags & EcsIterIsValid), ECS_INVALID_PARAMETER, 
+        "cannot set group during iteration");
+
+    ecs_query_iter_t *qit = &it->priv_.iter.query;
+    ecs_query_impl_t *q = flecs_query_impl(it->query);
+    ecs_check(q != NULL, ECS_INVALID_PARAMETER, NULL);
+    flecs_poly_assert(q, ecs_query_t);
+    ecs_query_cache_t *cache = q->cache;
+    ecs_check(cache != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    static ecs_vec_t empty_table = {0};
+
+    ecs_query_cache_group_t *group = flecs_query_cache_get_group(
+        cache, group_id);
+    if (!group) {
+        qit->tables = &empty_table; /* Dummy table to indicate empty result */
+        qit->all_tables = &empty_table;
+        qit->cur = 0;
+        qit->group = NULL;
+        qit->iter_single_group = true;
+        return;
+    }
+
+    qit->tables = &group->tables;
+    qit->all_tables = &group->tables;
+    qit->cur = 0;
+    qit->group = group;
+    qit->iter_single_group = true; /* Prevent iterating next group */
+    
+error:
+    return;
+}
+
+const ecs_query_group_info_t* ecs_query_get_group_info(
+    const ecs_query_t *query,
+    uint64_t group_id)
+{
+    flecs_poly_assert(query, ecs_query_t);
+    ecs_query_cache_group_t *node = flecs_query_cache_get_group(
+        flecs_query_impl(query)->cache, group_id);
+    if (!node) {
+        return NULL;
+    }
+    
+    return &node->info;
+}
+
+void* ecs_query_get_group_ctx(
+    const ecs_query_t *query,
+    uint64_t group_id)
+{
+    flecs_poly_assert(query, ecs_query_t);
+    const ecs_query_group_info_t *info = ecs_query_get_group_info(
+        query, group_id);
+    if (!info) {
+        return NULL;
+    } else {
+        return info->ctx;
     }
 }
 
@@ -34850,22 +35375,6 @@ int flecs_term_ref_lookup(
 }
 
 static
-ecs_id_t flecs_wildcard_to_any(ecs_id_t id) {
-    ecs_id_t flags = id & EcsTermRefFlags;
-    
-    if (ECS_IS_PAIR(id)) {
-        ecs_entity_t first = ECS_PAIR_FIRST(id);
-        ecs_entity_t second = ECS_PAIR_SECOND(id);
-        if (first == EcsWildcard) id = ecs_pair(EcsAny, second);
-        if (second == EcsWildcard) id = ecs_pair(ECS_PAIR_FIRST(id), EcsAny);
-    } else if ((id & ~EcsTermRefFlags) == EcsWildcard) {
-        id = EcsAny;
-    }
-
-    return id | flags;
-}
-
-static
 int flecs_term_refs_finalize(
     const ecs_world_t *world,
     ecs_term_t *term,
@@ -34942,19 +35451,6 @@ int flecs_term_refs_finalize(
     /* If source is wildcard, term won't return any data */
     if ((src->id & EcsIsVariable) && ecs_id_is_wildcard(ECS_TERM_REF_ID(src))) {
         term->inout = EcsInOutNone;
-    }
-
-    /* If operator is Not, automatically convert wildcard queries to any */
-    if (term->oper == EcsNot) {
-        if (ECS_TERM_REF_ID(first) == EcsWildcard) {
-            first->id = EcsAny | ECS_TERM_REF_FLAGS(first);
-        }
-
-        if (ECS_TERM_REF_ID(second) == EcsWildcard) {
-            second->id = EcsAny | ECS_TERM_REF_FLAGS(second);
-        }
-
-        term->id = flecs_wildcard_to_any(term->id);
     }
 
     return 0;
@@ -35533,12 +36029,14 @@ int flecs_term_finalize(
                 if (!((second_flags & EcsTraverseFlags) == EcsSelf)) {
                     if (!((src->id & EcsIsVariable) && (src_id == EcsAny))) {
                         if (!((second->id & EcsIsVariable) && (second_id == EcsAny))) {
-                            if (ecs_table_has_id(world, first_table, EcsTransitive)) {
-                                term->flags_ |= EcsTermTransitive;
-                            }
+                            if (!((second_id == EcsWildcard) && (term->oper == EcsNot))) {
+                                if (ecs_table_has_id(world, first_table, EcsTransitive)) {
+                                    term->flags_ |= EcsTermTransitive;
+                                }
 
-                            if (ecs_table_has_id(world, first_table, EcsReflexive)) {
-                                term->flags_ |= EcsTermReflexive;
+                                if (ecs_table_has_id(world, first_table, EcsReflexive)) {
+                                    term->flags_ |= EcsTermReflexive;
+                                }
                             }
                         }
                     }
@@ -35620,7 +36118,9 @@ int flecs_term_finalize(
         if (second->id & EcsIsVariable) {
             if (!ecs_id_is_wildcard(second_id) || second_id == EcsAny) {
                 trivial_term = false;
-                cacheable_term = false;
+                if (term->oper != EcsNot || second_id != EcsAny) {
+                    cacheable_term = false;
+                }
             }
         }
     }
@@ -35863,7 +36363,9 @@ int flecs_query_finalize_terms(
         term->field_index = flecs_ito(int8_t, field_count - 1);
 
         if (ecs_id_is_wildcard(term->id)) {
-            q->flags |= EcsQueryMatchWildcards;
+            if (term->oper != EcsNot || ecs_id_is_any(term->id)) {
+                q->flags |= EcsQueryMatchWildcards;
+            }
         } else if (!(term->flags_ & EcsTermIsOr)) {
             ECS_TERMSET_SET(q->static_id_fields, 1u << term->field_index);
         }
@@ -36297,6 +36799,9 @@ bool flecs_query_finalize_simple(
     term_count = i;
     ecs_os_memcpy_n(q->terms, desc->terms, ecs_term_t, term_count);
 
+    /* All fields are InOut */
+    q->write_fields = (1u << term_count) - 1;
+
     /* Simple query that only queries for component ids */
 
     /* Populate terms */
@@ -36539,7 +37044,9 @@ int flecs_query_finalize_query(
      * token buffer which simplifies memory management & reduces allocations. */
     flecs_query_populate_tokens(flecs_query_impl(q));
 
+    #ifndef FLECS_SANITIZE
 done:
+    #endif
     flecs_query_copy_arrays(q);
     return 0;
 error:
@@ -37499,7 +38006,8 @@ ecs_record_t* flecs_entity_index_get(
     uint64_t entity)
 {
     ecs_record_t *r = flecs_entity_index_get_any(index, entity);
-    ecs_assert(r->dense < index->alive_count, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(r->dense < index->alive_count, ECS_INVALID_PARAMETER, 
+            "entity is not alive");
     ecs_assert(ecs_vec_get_t(&index->dense, uint64_t, r->dense)[0] == entity,
         ECS_INVALID_PARAMETER, "mismatching liveliness generation for entity");
     return r;
@@ -37853,6 +38361,37 @@ void flecs_ordered_children_fini(
         &world->allocator, &cr->pair->ordered_children, ecs_entity_t);
 }
 
+void flecs_ordered_children_populate(
+    ecs_world_t *world,
+    ecs_component_record_t *cr)
+{    
+    ecs_vec_t *v = &cr->pair->ordered_children;
+    ecs_assert(ecs_vec_count(v) == 0, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(ECS_IS_PAIR(cr->id), ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(ECS_PAIR_FIRST(cr->id) ==  EcsChildOf, 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_iter_t it = ecs_each_id(world, cr->id);
+    while (ecs_each_next(&it)) {
+        int32_t i;
+        for (i = 0; i < it.count; i ++) {
+            ecs_vec_append_t(
+                &world->allocator, v, ecs_entity_t)[0] = it.entities[i];
+        }
+    }
+}
+
+void flecs_ordered_children_clear(
+    ecs_component_record_t *cr)
+{    
+    ecs_vec_t *v = &cr->pair->ordered_children;
+    ecs_assert(ECS_IS_PAIR(cr->id), ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(ECS_PAIR_FIRST(cr->id) ==  EcsChildOf, 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_vec_clear(v);
+}
+
 static
 void flecs_ordered_entities_append(
     ecs_world_t *world,
@@ -37890,7 +38429,7 @@ void flecs_ordered_entities_unparent_internal(
     int32_t row,
     int32_t count)
 {
-    if (table->flags & EcsTableHasOrderedChildren) {
+    if (table && (table->flags & EcsTableHasOrderedChildren)) {
         ecs_pair_record_t *pair = table->_->childof_r;
         const ecs_entity_t *entities = ecs_table_entities(entities_table);
         int32_t i = row, end = row + count;
@@ -38148,13 +38687,49 @@ void flecs_component_sparse_remove(
     ecs_table_t *table,
     int32_t row)
 {
+    ecs_id_t id = cr->id;
+    ecs_flags32_t flags = cr->flags;
+    bool dont_fragment = flags & EcsIdDontFragment;
+
+    /* If id is a wildcard, remove entity from all matching ids. */
+    if (dont_fragment && ecs_id_is_wildcard(cr->id)) {
+        /* A wildcard by itself can't be marked sparse so must be a pair. */
+        ecs_assert(ECS_IS_PAIR(id), ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(ECS_PAIR_SECOND(id) == EcsWildcard, 
+            ECS_UNSUPPORTED,
+            "remove(*, T) not supported for DontFragment targets");
+        ecs_entity_t entity = ecs_table_entities(table)[row];
+        ecs_component_record_t *cur = cr;
+        while ((cur = flecs_component_first_next(cur))) {
+            if (flecs_component_sparse_has(cur, entity)) {
+                ecs_type_t type = {
+                    .array = &cur->id,
+                    .count = 1
+                };
+
+                flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+                    .event = EcsOnRemove,
+                    .ids = &type,
+                    .table = table,
+                    .other_table = NULL,
+                    .offset = row,
+                    .count = 1,
+                    .observable = world
+                });
+
+                flecs_component_sparse_remove(world, cur, table, row);
+            }
+        }
+
+        return;
+    }
+
     ecs_entity_t entity = 
         flecs_component_sparse_remove_intern(world, cr, table, row);
 
     if (entity) {
-        ecs_flags32_t flags = cr->flags;
-        if (flags & EcsIdDontFragment) {
-            if (ECS_IS_PAIR(cr->id)) {
+        if (dont_fragment) {
+            if (ECS_IS_PAIR(id)) {
                 if (flags & EcsIdExclusive) {
                     flecs_component_sparse_dont_fragment_exclusive_remove(
                         cr, entity);
@@ -38256,14 +38831,35 @@ void flecs_component_sparse_dont_fragment_exclusive_insert(
     ecs_entity_t tgt, *tgt_ptr = flecs_sparse_ensure_fast_t(
         parent->sparse, ecs_entity_t, entity);
     ecs_assert(tgt_ptr != NULL, ECS_INTERNAL_ERROR, NULL);
+
     if ((tgt = *tgt_ptr)) {
         ecs_component_record_t *other = flecs_components_get(world,
             ecs_pair(ECS_PAIR_FIRST(component_id), tgt));
         ecs_assert(other != NULL, ECS_INTERNAL_ERROR, NULL);
-        flecs_component_sparse_remove(world, other, table, row);
+        if (other != cr) {
+            ecs_type_t type = {
+                .array = &other->id,
+                .count = 1
+            };
+
+            flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+                .event = EcsOnRemove,
+                .ids = &type,
+                .table = table,
+                .other_table = NULL,
+                .offset = row,
+                .count = 1,
+                .observable = world
+            });
+
+            flecs_component_sparse_remove_intern(world, other, table, row);
+        }
     }
 
     *tgt_ptr = ECS_PAIR_SECOND(component_id);
+
+    ecs_assert(flecs_sparse_has(parent->sparse, entity), 
+        ECS_INTERNAL_ERROR, NULL);
 }
 
 void* flecs_component_sparse_insert(
@@ -38390,7 +38986,6 @@ void* flecs_component_sparse_emplace(
 #ifdef FLECS_SANITIZE
 static
 void flecs_table_check_sanity(
-    ecs_world_t *world,
     ecs_table_t *table) 
 {
     int32_t i, count = ecs_table_count(table);
@@ -38450,7 +39045,7 @@ void flecs_table_check_sanity(
         (table->flags & EcsTableHasTraversable), ECS_INTERNAL_ERROR, NULL);
 }
 #else
-#define flecs_table_check_sanity(world, table)
+#define flecs_table_check_sanity(table)
 #endif
 
 /* Set flags for type hooks so table operations can quickly check whether a
@@ -39763,6 +40358,9 @@ int32_t flecs_table_grow_data(
     /* If the table is monitored indicate that there has been a change */
     flecs_table_mark_table_dirty(world, table, 0);
 
+    /* Mark columns as potentially reallocated */
+    flecs_increment_table_column_version(world, table);
+
     /* Return index of first added entity */
     return count;
 }
@@ -39796,7 +40394,7 @@ int32_t flecs_table_append(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     /* Get count & size before growing entities array. This tells us whether the
      * arrays will realloc */
@@ -39815,6 +40413,7 @@ int32_t flecs_table_append(
  
     /* If the table is monitored indicate that there has been a change */
     flecs_table_mark_table_dirty(world, table, 0);
+    flecs_increment_table_column_version(world, table);
     ecs_assert(count >= 0, ECS_INTERNAL_ERROR, NULL);
 
     /* Fast path: no switch columns, no lifecycle actions */
@@ -39869,7 +40468,7 @@ int32_t flecs_table_append(
         flecs_bitset_addn(bs, 1);
     }
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     return count;
 }
@@ -39902,7 +40501,7 @@ void flecs_table_delete(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     int32_t count = ecs_table_count(table);
     ecs_assert(count > 0, ECS_INTERNAL_ERROR, NULL);
@@ -39927,7 +40526,7 @@ void flecs_table_delete(
     }     
 
     /* If the table is monitored indicate that there has been a change */
-    flecs_table_mark_table_dirty(world, table, 0);    
+    flecs_table_mark_table_dirty(world, table, 0);
 
     /* Destruct component data */
     ecs_column_t *columns = table->data.columns;
@@ -39943,7 +40542,7 @@ void flecs_table_delete(
 
         table->data.count --;
 
-        flecs_table_check_sanity(world, table);
+        flecs_table_check_sanity(table);
         return;
     }
 
@@ -40006,7 +40605,7 @@ void flecs_table_delete(
 
     table->data.count --;
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 }
 
 /* Move operation for tables that don't have any complex logic */
@@ -40060,13 +40659,13 @@ void flecs_table_move(
     ecs_assert(src_index >= 0, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(dst_index >= 0, ECS_INTERNAL_ERROR, NULL);
 
-    flecs_table_check_sanity(world, dst_table);
-    flecs_table_check_sanity(world, src_table);
+    flecs_table_check_sanity(dst_table);
+    flecs_table_check_sanity(src_table);
 
     if (!((dst_table->flags | src_table->flags) & EcsTableIsComplex)) {
         flecs_table_fast_move(dst_table, dst_index, src_table, src_index);
-        flecs_table_check_sanity(world, dst_table);
-        flecs_table_check_sanity(world, src_table);
+        flecs_table_check_sanity(dst_table);
+        flecs_table_check_sanity(src_table);
         return;
     }
 
@@ -40136,8 +40735,8 @@ void flecs_table_move(
             &src_entity, src_index, 1, use_move_dtor);
     }
 
-    flecs_table_check_sanity(world, dst_table);
-    flecs_table_check_sanity(world, src_table);
+    flecs_table_check_sanity(dst_table);
+    flecs_table_check_sanity(src_table);
 }
 
 /* Append n entities to table */
@@ -40149,11 +40748,11 @@ int32_t flecs_table_appendn(
 {
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
     int32_t cur_count = ecs_table_count(table);
     int32_t result = flecs_table_grow_data(
         world, table, to_add, cur_count + to_add, ids);
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     return result;
 }
@@ -40167,7 +40766,7 @@ bool flecs_table_shrink(
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
     (void)world;
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     bool has_payload = table->data.entities != NULL;
     ecs_vec_t v_entities = ecs_vec_from_entities(table);
@@ -40186,7 +40785,9 @@ bool flecs_table_shrink(
     table->data.size = v_entities.size;
     table->data.entities = v_entities.array;
 
-    flecs_table_check_sanity(world, table);
+    flecs_increment_table_column_version(world, table);
+
+    flecs_table_check_sanity(table);
 
     return has_payload;
 }
@@ -40224,7 +40825,7 @@ void flecs_table_swap(
     ecs_assert(row_1 >= 0, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(row_2 >= 0, ECS_INTERNAL_ERROR, NULL);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
     
     if (row_1 == row_2) {
         return;
@@ -40257,7 +40858,7 @@ void flecs_table_swap(
 
     ecs_column_t *columns = table->data.columns;
     if (!columns) {
-        flecs_table_check_sanity(world, table);
+        flecs_table_check_sanity(table);
         return;
     }
 
@@ -40297,7 +40898,7 @@ void flecs_table_swap(
         }
     }
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 }
 
 static
@@ -40470,6 +41071,9 @@ void flecs_table_merge_data(
     /* Mark entity column as dirty */
     flecs_table_mark_table_dirty(world, dst_table, 0);
 
+    /* Mark columns as potentially reallocated */
+    flecs_increment_table_column_version(world, dst_table);
+
     dst_table->data.entities = dst_entities.array;
     dst_table->data.count = dst_entities.count;
     dst_table->data.size = dst_entities.size;
@@ -40492,8 +41096,8 @@ void flecs_table_merge(
     ecs_assert(!src_table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
     ecs_assert(!dst_table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, src_table);
-    flecs_table_check_sanity(world, dst_table);
+    flecs_table_check_sanity(src_table);
+    flecs_table_check_sanity(dst_table);
 
     const ecs_entity_t *src_entities = ecs_table_entities(src_table);
     int32_t src_count = ecs_table_count(src_table);
@@ -40517,8 +41121,8 @@ void flecs_table_merge(
         ecs_assert(src_table->_->traversable_count == 0, ECS_INTERNAL_ERROR, NULL);
     }
 
-    flecs_table_check_sanity(world, src_table);
-    flecs_table_check_sanity(world, dst_table);
+    flecs_table_check_sanity(src_table);
+    flecs_table_check_sanity(dst_table);
 }
 
 /* Internal mechanism for propagating information to tables */
@@ -41334,8 +41938,14 @@ int flecs_type_new_filtered(
     }
 
     dst->count = w;
+
     if (w != count) {
-        dst->array = flecs_wrealloc_n(world, ecs_id_t, w, count, dst->array);
+        if (w) {
+            dst->array = flecs_wrealloc_n(world, ecs_id_t, w, count, dst->array);
+        } else {
+            flecs_wfree_n(world, ecs_id_t, count, dst->array);
+            dst->array = NULL;
+        }
     }
 
     return 0;
@@ -41699,7 +42309,7 @@ ecs_table_t *flecs_table_new(
     flecs_hashmap_result_t table_elem,
     ecs_table_t *prev)
 {
-    flecs_check_exclusive_world_access(world);
+    flecs_check_exclusive_world_access_write(world);
 
     ecs_os_perf_trace_push("flecs.table.create");
 
@@ -45461,6 +46071,11 @@ void flecs_json_string_escape(
     ecs_strbuf_t *buf,
     const char *value)
 {
+    if (!value) {
+        ecs_strbuf_appendlit(buf, "null");
+        return;
+    }
+
     ecs_size_t length = flecs_stresc(NULL, 0, '"', value);
     if (length == ecs_os_strlen(value)) {
         ecs_strbuf_appendch(buf, '"');
@@ -46311,15 +46926,19 @@ bool flecs_json_serialize_vars(
     ecs_strbuf_t *buf,
     const ecs_iter_to_json_desc_t *desc)
 {
-    char **variable_names = it->variable_names;
-    int32_t var_count = it->variable_count;
+    if (!it->query) {
+        return 0;
+    }
+
+    char **variable_names = it->query->vars;
+    int32_t var_count = it->query->var_count;
     int32_t actual_count = 0;
 
     for (int i = 1; i < var_count; i ++) {
         const char *var_name = variable_names[i];
         if (flecs_json_skip_variable(var_name)) continue;
 
-        ecs_entity_t var = it->variables[i].entity;
+        ecs_entity_t var = ecs_iter_get_vars(it)[i].entity;
         if (!var) {
             /* Can't happen, but not the place of the serializer to complain */
             continue;
@@ -46378,7 +46997,7 @@ int flecs_json_serialize_matches(
                     }
 
                     ecs_iter_t qit = ecs_query_iter(world, q);
-                    if (!qit.variables) {
+                    if (!ecs_iter_get_vars(&qit)) {
                         ecs_iter_fini(&qit);
                         continue;
                     }
@@ -57797,7 +58416,7 @@ static void flecs_pipeline_free(
         ecs_world_t *world = p->query->world;
         ecs_allocator_t *a = &world->allocator;
         ecs_vec_fini_t(a, &p->ops, ecs_pipeline_op_t);
-        ecs_vec_fini_t(a, &p->systems, ecs_entity_t);
+        ecs_vec_fini_t(a, &p->systems, ecs_system_t*);
         ecs_os_free(p->iters);
         ecs_query_fini(p->query);
         ecs_os_free(p);
@@ -58056,7 +58675,7 @@ bool flecs_pipeline_build(
     ecs_map_init(&ws.wildcard_ids, a);
 
     ecs_vec_reset_t(a, &pq->ops, ecs_pipeline_op_t);
-    ecs_vec_reset_t(a, &pq->systems, ecs_entity_t);
+    ecs_vec_reset_t(a, &pq->systems, ecs_system_t*);
 
     bool multi_threaded = false;
     bool immediate = false;
@@ -58139,8 +58758,7 @@ bool flecs_pipeline_build(
             /* Don't increase count for inactive systems, as they are ignored by
              * the query used to run the pipeline. */
             if (is_active) {
-                ecs_vec_append_t(a, &pq->systems, ecs_entity_t)[0] = 
-                    it.entities[i];
+                ecs_vec_append_t(a, &pq->systems, ecs_system_t*)[0] = sys;
                 if (!op->count) {
                     op->multi_threaded = multi_threaded;
                     op->immediate = immediate;
@@ -58173,12 +58791,12 @@ bool flecs_pipeline_build(
 
         int32_t i, count = ecs_vec_count(&pq->systems);
         int32_t op_index = 0, ran_since_merge = 0;
-        ecs_entity_t *systems = ecs_vec_first_t(&pq->systems, ecs_entity_t);
+        ecs_system_t **systems = ecs_vec_first_t(&pq->systems, ecs_system_t*);
         for (i = 0; i < count; i ++) {
-            ecs_entity_t system = systems[i];
-            const EcsPoly *poly = ecs_get_pair(world, system, EcsPoly, EcsSystem);
-            flecs_poly_assert(poly->poly, ecs_system_t);
-            ecs_system_t *sys = (ecs_system_t*)poly->poly;
+            ecs_system_t *sys = systems[i];
+            ecs_entity_t system = sys->query->entity;
+            ecs_assert(system != 0, ECS_INTERNAL_ERROR, NULL);
+            (void)system;
 
 #ifdef FLECS_LOG_1
             char *path = ecs_get_path(world, system);
@@ -58331,14 +58949,11 @@ int32_t flecs_run_pipeline_ops(
     ecs_assert(!stage_index || op->multi_threaded, ECS_INTERNAL_ERROR, NULL);
 
     int32_t count = ecs_vec_count(&pq->systems);
-    ecs_entity_t* systems = ecs_vec_first_t(&pq->systems, ecs_entity_t);
+    ecs_system_t **systems = ecs_vec_first_t(&pq->systems, ecs_system_t*);
     int32_t ran_since_merge = i - op->offset;
 
     for (; i < count; i++) {
-        ecs_entity_t system = systems[i];
-        const EcsPoly* poly = ecs_get_pair(world, system, EcsPoly, EcsSystem);
-        flecs_poly_assert(poly->poly, ecs_system_t);
-        ecs_system_t* sys = (ecs_system_t*)poly->poly;
+        ecs_system_t* sys = systems[i];
 
         /* Keep track of the last frame for which the system has ran, so we
          * know from where to resume the schedule in case the schedule
@@ -58354,7 +58969,7 @@ int32_t flecs_run_pipeline_ops(
             s = stage;
         }
 
-        flecs_run_intern(world, s, system, sys, stage_index,
+        flecs_run_system(world, s, sys->query->entity, sys, stage_index,
             stage_count, delta_time, NULL);
 
         ecs_os_linc(&world->info.systems_ran_frame);
@@ -58408,6 +59023,8 @@ void flecs_run_pipeline(
 
         if (!immediate) {
             ecs_readonly_begin(world, multi_threaded);
+        } else {
+            flecs_defer_begin(world, stage);
         }
 
         ECS_BIT_COND(world->flags, EcsWorldMultiThreaded, op_multi_threaded);
@@ -58451,6 +59068,8 @@ void flecs_run_pipeline(
             if (measure_time) {
                 pq->cur_op->time_spent += ecs_time_measure(&mt);
             }
+        } else {
+            flecs_defer_end(world, stage);
         }
 
         /* Store the current state of the schedule after we synchronized the
@@ -62382,17 +63001,27 @@ void ecs_script_clear(
     if (!instance) {
         ecs_delete_with(world, ecs_pair_t(EcsScript, script));
     } else {
-        ecs_defer_begin(world);
+        ecs_vec_t to_delete = {0};
+        ecs_vec_init_t(&world->allocator, &to_delete, ecs_entity_t, 0);
+
         ecs_iter_t it = ecs_children(world, instance);
         while (ecs_children_next(&it)) {
             if (ecs_table_has_id(world, it.table, ecs_pair(EcsScriptTemplate, script))) {
                 int32_t i, count = it.count;
                 for (i = 0; i < count; i ++) {
-                    ecs_delete(world, it.entities[i]);
+                    ecs_vec_append_t(
+                        &world->allocator, &to_delete, ecs_entity_t)[0] = 
+                            it.entities[i];
                 }
             }
         }
-        ecs_defer_end(world);
+
+        ecs_entity_t *to_delete_ids = ecs_vec_first(&to_delete);
+        int32_t i, count = ecs_vec_count(&to_delete);
+        for (i = 0; i < count; i ++) {
+            ecs_delete(world, to_delete_ids[i]);
+        }
+        ecs_vec_fini_t(&world->allocator, &to_delete, ecs_entity_t);
     }
 }
 
@@ -64087,36 +64716,39 @@ void ecs_script_vars_from_iter(
 
     /* Set variables for query variables */
     {
-        int32_t i, var_count = it->variable_count;
-        for (i = 1 /* skip this variable */ ; i < var_count; i ++) {
-            const ecs_entity_t *e_ptr = NULL;
-            ecs_var_t *query_var = &it->variables[i];
-            if (query_var->entity) {
-                e_ptr = &query_var->entity;
-            } else {
-                ecs_table_range_t *range = &query_var->range;
-                if (range->count == 1) {
-                    const ecs_entity_t *entities = 
-                        ecs_table_entities(range->table);
-                    e_ptr = &entities[range->offset];
+        if (it->query) {
+            char **variable_names = it->query->vars;
+            int32_t i, var_count = ecs_iter_get_var_count(it);
+            for (i = 1 /* skip this variable */ ; i < var_count; i ++) {
+                const ecs_entity_t *e_ptr = NULL;
+                ecs_var_t *query_var = &ecs_iter_get_vars(it)[i];
+                if (query_var->entity) {
+                    e_ptr = &query_var->entity;
+                } else {
+                    ecs_table_range_t *range = &query_var->range;
+                    if (range->count == 1) {
+                        const ecs_entity_t *entities = 
+                            ecs_table_entities(range->table);
+                        e_ptr = &entities[range->offset];
+                    }
                 }
-            }
-            if (!e_ptr) {
-                continue;
-            }
+                if (!e_ptr) {
+                    continue;
+                }
 
-            ecs_script_var_t *var = ecs_script_vars_lookup(
-                vars, it->variable_names[i]);
-            if (!var) {
-                var = ecs_script_vars_declare(vars, it->variable_names[i]);
-                var->value.type = ecs_id(ecs_entity_t);
-            } else {
-                ecs_check(var->value.type == ecs_id(ecs_entity_t), 
-                    ECS_INVALID_PARAMETER, NULL);
-            }
+                ecs_script_var_t *var = ecs_script_vars_lookup(
+                    vars, variable_names[i]);
+                if (!var) {
+                    var = ecs_script_vars_declare(vars, variable_names[i]);
+                    var->value.type = ecs_id(ecs_entity_t);
+                } else {
+                    ecs_check(var->value.type == ecs_id(ecs_entity_t), 
+                        ECS_INVALID_PARAMETER, NULL);
+                }
 
-            /* Safe, variable value will never be written */
-            var->value.ptr = ECS_CONST_CAST(ecs_entity_t*, e_ptr);
+                /* Safe, variable value will never be written */
+                var->value.ptr = ECS_CONST_CAST(ecs_entity_t*, e_ptr);
+            }
         }
     }
 
@@ -65479,16 +66111,53 @@ ecs_entity_t flecs_script_get_src(
 }
 
 static
+bool flecs_script_can_default_ctor(
+    ecs_world_t *world,
+    ecs_id_t component)
+{
+    /* Check if tag is a component, and if so, if it can be default 
+     * constructed. */
+    ecs_entity_t type = ecs_get_typeid(world, component);
+    if (type) {
+        const ecs_type_info_t *ti = ecs_get_type_info(world, type);
+        ecs_assert(ti != NULL, ECS_INTERNAL_ERROR, NULL);
+        if (ti->hooks.flags & ECS_TYPE_HOOK_CTOR_ILLEGAL) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static
 int flecs_script_eval_tag(
     ecs_script_eval_visitor_t *v,
     ecs_script_tag_t *node)
 {
+    bool resolved = node->id.eval != 0;
+
     if (flecs_script_eval_id(v, node, &node->id)) {
         return -1;
     }
 
+    if (!resolved) {
+        if (!flecs_script_can_default_ctor(v->world, node->id.eval)) {
+            if (node->id.second) {
+                flecs_script_eval_error(v, node, 
+                    "cannot add (%s, %s), "
+                    "type is not default constructible",
+                    node->id.first, node->id.second);
+            } else {
+                flecs_script_eval_error(v, node, 
+                    "cannot add %s, "
+                    "type is not default constructible",
+                    node->id.first);
+            }
+            return -1;
+        }
+    }
+
     if (v->is_with_scope) {
-        flecs_script_eval_error(v, node, "invalid component in with scope"); 
+        flecs_script_eval_error(v, node, "invalid component in with scope");
         return -1;
     }
 
@@ -65516,8 +66185,27 @@ int flecs_script_eval_component(
     ecs_script_eval_visitor_t *v,
     ecs_script_component_t *node)
 {
+    bool resolved = node->id.eval != 0;
+
     if (flecs_script_eval_id(v, node, &node->id)) {
         return -1;
+    }
+
+    if (!resolved) {
+        if (!flecs_script_can_default_ctor(v->world, node->id.eval)) {
+            if (node->id.second) {
+                flecs_script_eval_error(v, node, 
+                    "cannot add (%s, %s), "
+                    "type is not default constructible",
+                    node->id.first, node->id.second);
+            } else {
+                flecs_script_eval_error(v, node, 
+                    "cannot add %s, "
+                    "type is not default constructible",
+                    node->id.first);
+            }
+            return -1;
+        }
     }
 
     if (!v->entity) {
@@ -67032,7 +67720,7 @@ void MonitorStats(ecs_iter_t *it) {
     ecs_world_t *world = it->real_world;
     ecs_monitor_stats_ctx_t *ctx = it->ctx;
 
-    EcsStatsHeader *hdr = ecs_field_w_size(it, 0, 0);
+    EcsStatsHeader *hdr = ecs_field_w_size(it, ecs_field_size(it, 0), 0);
 
     ecs_ftime_t elapsed = hdr->elapsed;
     hdr->elapsed += it->delta_time;
@@ -67122,8 +67810,8 @@ static
 void ReduceStats(ecs_iter_t *it) {
     ecs_reduce_stats_ctx_t *ctx = it->ctx;
 
-    void *dst = ecs_field_w_size(it, 0, 0);
-    void *src = ecs_field_w_size(it, 0, 1);
+    void *dst = ecs_field_w_size(it, ecs_field_size(it, 0), 0);
+    void *src = ecs_field_w_size(it, ecs_field_size(it, 1), 1);
 
     dst = ECS_OFFSET_T(dst, EcsStatsHeader);
     src = ECS_OFFSET_T(src, EcsStatsHeader);
@@ -67146,8 +67834,8 @@ void AggregateStats(ecs_iter_t *it) {
     ecs_aggregate_stats_ctx_t *ctx = it->ctx;
     int32_t interval = ctx->interval;
 
-    EcsStatsHeader *dst_hdr = ecs_field_w_size(it, 0, 0);
-    EcsStatsHeader *src_hdr = ecs_field_w_size(it, 0, 1);
+    EcsStatsHeader *dst_hdr = ecs_field_w_size(it, ecs_field_size(it, 0), 0);
+    EcsStatsHeader *src_hdr = ecs_field_w_size(it, ecs_field_size(it, 1), 1);
 
     void *dst = ECS_OFFSET_T(dst_hdr, EcsStatsHeader);
     void *src = ECS_OFFSET_T(src_hdr, EcsStatsHeader);
@@ -68631,15 +69319,13 @@ void FlecsWorldSummaryImport(
 ecs_mixins_t ecs_system_t_mixins = {
     .type_name = "ecs_system_t",
     .elems = {
-        [EcsMixinWorld] = offsetof(ecs_system_t, world),
-        [EcsMixinEntity] = offsetof(ecs_system_t, entity),
         [EcsMixinDtor] = offsetof(ecs_system_t, dtor)
     }
 };
 
 /* -- Public API -- */
 
-ecs_entity_t flecs_run_intern(
+ecs_entity_t flecs_run_system(
     ecs_world_t *world,
     ecs_stage_t *stage,
     ecs_entity_t system,
@@ -68713,8 +69399,6 @@ ecs_entity_t flecs_run_intern(
     qit.callback_ctx = system_data->callback_ctx;
     qit.run_ctx = system_data->run_ctx;
 
-    flecs_defer_begin(world, stage);
-
     if (stage_count > 1 && system_data->multi_threaded) {
         wit = ecs_worker_iter(it, stage_index, stage_count);
         it = &wit;
@@ -68734,13 +69418,22 @@ ecs_entity_t flecs_run_intern(
             run(it);
             ecs_iter_fini(&qit);
         } else {
+            if (it == &qit && (qit.flags & EcsIterTrivialCached)) {
+                it->next = flecs_query_trivial_cached_next;
+            }
             run(it);
         }
     } else {
         if (system_data->query->term_count) {
             if (it == &qit) {
-                while (ecs_query_next(&qit)) {
-                    action(&qit);
+                if (qit.flags & EcsIterTrivialCached) {
+                    while (flecs_query_trivial_cached_next(&qit)) {
+                        action(&qit);
+                    }
+                } else {
+                    while (ecs_query_next(&qit)) {
+                        action(&qit);
+                    }
                 }
             } else {
                 while (ecs_iter_next(it)) {
@@ -68759,12 +69452,11 @@ ecs_entity_t flecs_run_intern(
         system_data->time_spent += (ecs_ftime_t)ecs_time_measure(&time_start);
     }
 
-    flecs_defer_end(world, stage);
-
     ecs_os_perf_trace_pop(system_data->name);
 
     return it->interrupted_by;
 }
+
 
 /* -- Public API -- */
 
@@ -68779,10 +69471,12 @@ ecs_entity_t ecs_run_worker(
     ecs_stage_t *stage = flecs_stage_from_world(&world);
     ecs_system_t *system_data = flecs_poly_get(world, system, ecs_system_t);
     ecs_assert(system_data != NULL, ECS_INVALID_PARAMETER, NULL);
-
-    return flecs_run_intern(
+    flecs_defer_begin(world, stage);
+    ecs_entity_t result = flecs_run_system(
         world, stage, system, system_data, stage_index, stage_count, 
         delta_time, param);
+    flecs_defer_end(world, stage);
+    return result;
 }
 
 ecs_entity_t ecs_run(
@@ -68794,8 +69488,11 @@ ecs_entity_t ecs_run(
     ecs_stage_t *stage = flecs_stage_from_world(&world);
     ecs_system_t *system_data = flecs_poly_get(world, system, ecs_system_t);
     ecs_assert(system_data != NULL, ECS_INVALID_PARAMETER, NULL);
-    return flecs_run_intern(
+    flecs_defer_begin(world, stage);
+    ecs_entity_t result = flecs_run_system(
         world, stage, system, system_data, 0, 0, delta_time, param);
+    flecs_defer_end(world, stage);
+    return result;
 }
 
 /* System deinitialization */
@@ -68885,9 +69582,7 @@ ecs_entity_t ecs_system_init(
         ecs_assert(system != NULL, ECS_INTERNAL_ERROR, NULL);
         
         poly->poly = system;
-        system->world = world;
         system->dtor = flecs_system_poly_fini;
-        system->entity = entity;
 
         ecs_query_desc_t query_desc = desc->query;
         query_desc.entity = entity;
@@ -68902,7 +69597,6 @@ ecs_entity_t ecs_system_init(
         flecs_defer_begin(world, world->stages[0]);
 
         system->query = query;
-        system->query_entity = query->entity;
 
         system->run = desc->run;
         system->action = desc->callback;
@@ -69047,6 +69741,2915 @@ void FlecsSystemImport(
 }
 
 #endif
+
+/**
+ * @file query/cache/cache.c
+ * @brief Cached query implementation.
+ * 
+ * Implements a cache that stores a list of tables that matches the query. 
+ * Cached queries outperform uncached queries in many scenarios since they don't
+ * have to search for tables that match a query, but just iterate a list.
+ * 
+ * A cache has a "cache query" which is derived from the actual query the 
+ * application provides. This cache query differs in two significant ways from 
+ * the application-provided query:
+ * - It does not contain terms that aren't cacheable
+ * - It always matches empty tables
+ * 
+ * If the number of terms in the actual query differs from the cache query, the
+ * query will create a field_map array that maps from cached field indices to
+ * actual query indices.
+ * 
+ * Cached queries use an observer to get notified of new/deleted tables. In most
+ * cases this is sufficient to keep the cache up to date, but for queries that
+ * match components outside of a table (for example, from a parent entity) the
+ * cache will have to be revalidated after a parent changes a matched component.
+ * This is called rematching, the implementation can be found in match.c.
+ * 
+ * A cache can be trivial or non-trivial. A trivial cache is a cache for a query
+ * that meets the following criteria:
+ * - The query doesn't have any wildcards
+ * - The query doesn't use relationship traversal
+ * - The query doesn't use operators other than And, Not or Optional
+ * - The cached query and actual query have the same terms
+ * 
+ * A trivial cache has to store much less data for each cached element, and uses
+ * an iterator implementation that is much faster. Because of this difference 
+ * the code often needs to lookup the size of cache elements before doing work.
+ * 
+ * The following types are important for the cache:
+ * - ecs_query_cache_match_t: Stores a single match for a table.
+ * - ecs_query_cache_table_t: Element in the cache->tables map, which allows for
+ *                            looking up a match by table id.
+ * - ecs_query_cache_group_t: Stores an array of matched tables. A query has a
+ *                            single group by default, but can have more (see 
+ *                            group_by).
+ * 
+ * There are three cache features that significantly alter the way how elements
+ * are stored in the cache, which are group_by, order_by and wildcards.
+ * 
+ * Group_by
+ * ========
+ * Group_by assigns a group id (unsigned 64bit integer) to each table. This 
+ * number is computed by a group_by function that can be provided by the 
+ * application. A group can only be computed from which components are stored in
+ * a table (the table type).
+ * 
+ * By default a query only has a single group which contains all matched tables
+ * stored in an array. When a query uses group_by, the matched tables are split
+ * up across multiple groups depending on the computed group id of the table.
+ * When a group becomes empty (there are no more tables with the group id) it is
+ * deleted from the cache.
+ * 
+ * The query cache contains a "groups" map and a "tables" map. The groups map
+ * allows for group id -> group lookups. The tables map allows for table id ->
+ * table element lookups. Because tables are stored in arrays that can be 
+ * reallocated, rather than a pointer to the table element, the tables map 
+ * stores a pointer to the group the table is part of, and an index into the
+ * group's table array.
+ * 
+ * Queries can use group_by for two main reasons:
+ * - It allows for quickly iterating subsets of the matched query results
+ * - Groups are iterated in order based on group id
+ * 
+ * An application can iterate a single group by calling ecs_iter_set_group on an
+ * iterator created from a query that uses group_by. This will cause the 
+ * iterator to only iterate the table array for that specific group. To find the
+ * group's table array, the ecs_iter_set_group function uses the groups map.
+ * 
+ * Groups are stored in a linked list that's ordered by the group id. This can
+ * be in ascending or descending order, depending on the query. Because of this
+ * ordering, group insertion and group removal is an O(N) operation where N is
+ * the number of groups in the query. The head of the list is stored in the
+ * first_group member of the query.
+ * 
+ * The cascade query feature is built on top of group_by. It provides a callback
+ * that computes a hierarchy depth for the table with a specified relationship.
+ * Because groups are stored in ascending or descending order, this effectively
+ * means that tables will be iterated in a breadth-first order, which can be
+ * useful for hierarchy traversal code or transform systems.
+ * 
+ * Order_by
+ * ========
+ * Order_by will cause the query to return results in an order that is defined
+ * by either a component or entity id. To accomplish this, the query has to find
+ * the order across different tables. The code will first sort the elements in
+ * each matched table, and then build a list of (offset, count) slices across 
+ * the matched tables that represents the correct iteration order. The algorithm
+ * used for sorting is qsort.
+ * 
+ * Resorting is a very expensive operation. Queries use change detection, which
+ * at a table level can detect if any changes occurred to the entities or ordered
+ * by component. Only if a change has been detected will resorting occur. Even
+ * then, this remains an expensive feature and should only be used for data that
+ * doesn't change often. Flecs uses the query sorting feature to ensure that
+ * pipeline queries return systems in a well defined order.
+ * 
+ * The sorted list of slices is stored in the table_slices member of the cache,
+ * and is only populated for sorted queries.
+ * 
+ * When group_by and order_by are combined in a single query, the group order
+ * takes precedence over order_by.
+ * 
+ * It is currently not possible to iterate a single group when order_by is used
+ * together with group_by. This is a TODO that has to be addressed by adding a
+ * table_slices array to each group instead of as a member of the cache object.
+ * 
+ * Wildcards
+ * =========
+ * Wildcards are a query feature that can cause a single table to be matched
+ * multiple times. A typical example would be a (Likes, *) query. If an entity
+ * has both (Likes, Bob) and (Likes, Alice), it (and all entities in the same 
+ * table) will get matched twice by the query.
+ * 
+ * When a table matches multiple times (through one or more wildcard terms), any
+ * match after the first is stored in a separate wildcard_matches member on the
+ * cache element. This separate array ensures that tables can be removed from
+ * groups without leaving arbitrarily sized holes in the group->tables array.
+ * 
+ * When iterating a wildcard query, the iterator will alternate between 
+ * iterating the group->tables array and the wildcard_matches array on each
+ * matched table, in a way that all matches for the same table are iterated
+ * together.
+ */
+
+
+/* Is cache trivial? */
+bool flecs_query_cache_is_trivial(
+    const ecs_query_cache_t *cache)
+{
+    return (cache->query->flags & EcsQueryTrivialCache) != 0;
+}
+
+/* Trivial caches have a significantly smaller cache element size */
+ecs_size_t flecs_query_cache_elem_size(
+    const ecs_query_cache_t *cache) 
+{
+    return flecs_query_cache_is_trivial(cache) 
+        ? ECS_SIZEOF(ecs_query_triv_cache_match_t) 
+        : ECS_SIZEOF(ecs_query_cache_match_t)
+        ;
+}
+
+/* The default group_by function. When an application specifies a relationship
+ * for the ecs_query_desc_t::group_by field but does not provide a 
+ * group_by_callback, this function will be automatically used. It will cause
+ * the query cache to be grouped by relationship target. */
+static
+uint64_t flecs_query_cache_default_group_by(
+    ecs_world_t *world, 
+    ecs_table_t *table, 
+    ecs_id_t id, 
+    void *ctx) 
+{
+    (void)ctx;
+
+    ecs_id_t match;
+    if (ecs_search(world, table, ecs_pair(id, EcsWildcard), &match) != -1) {
+        return ecs_pair_second(world, match);
+    }
+    return 0;
+}
+
+/* The group_by function that's used for the cascade feature. Groups tables by
+ * hierarchy depth, resulting in breadth-first iteration. */
+static
+uint64_t flecs_query_cache_group_by_cascade(
+    ecs_world_t *world,
+    ecs_table_t *table,
+    ecs_id_t id,
+    void *ctx)
+{
+    (void)id;
+    ecs_term_t *term = ctx;
+    ecs_entity_t rel = term->trav;
+    int32_t depth = flecs_relation_depth(world, rel, table);
+    return flecs_ito(uint64_t, depth);
+}
+
+/* Initialize cache with matching tables. */
+static
+void flecs_query_cache_match_tables(
+    ecs_world_t *world,
+    ecs_query_cache_t *cache)
+{
+    ecs_iter_t it = ecs_query_iter(world, cache->query);
+    ECS_BIT_SET(it.flags, EcsIterNoData);
+    ECS_BIT_SET(it.flags, EcsIterTableOnly);
+
+    if (!ecs_query_next(&it)) {
+        return;
+    }
+
+    while (flecs_query_cache_match_next(cache, &it)) { }
+}
+
+/* Match new table with cache. */
+static
+bool flecs_query_cache_match_table(
+    ecs_world_t *world,
+    ecs_query_cache_t *cache,
+    ecs_table_t *table)
+{
+    if (!ecs_map_is_init(&cache->tables)) {
+        return false;
+    }
+
+    ecs_query_t *q = cache->query;
+
+#ifndef FLECS_SANITIZE
+    if (!flecs_table_bloom_filter_test(table, q->bloom_filter)) {
+        return false;
+    }
+#endif
+
+    /* Iterate uncached query for table to check if it matches. If this is a
+     * wildcard query, a table can match multiple times. */
+    ecs_iter_t it = flecs_query_iter(world, q);
+    it.flags |= EcsIterNoData;
+    ecs_iter_set_var_as_table(&it, 0, table);
+
+    if (!ecs_query_next(&it)) {
+        /* Table doesn't match */
+        return false;
+    }
+
+    if (flecs_query_cache_match_next(cache, &it)) {
+        /* Should not return for more than one table. */
+        ecs_abort(ECS_INTERNAL_ERROR, NULL);
+    }
+
+#ifdef FLECS_SANITIZE
+    /* Sanity check to make sure bloom filter is correct */
+    ecs_assert(flecs_table_bloom_filter_test(table, q->bloom_filter),
+        ECS_INTERNAL_ERROR, NULL);
+#endif
+
+    return true;
+}
+
+/* Iterate component monitors for cache. Each field that could potentially cause
+ * up traversal will create a monitor. Component monitors are registered with 
+ * the world and are used to determine whether a rematch is necessary. */
+static
+void flecs_query_cache_for_each_component_monitor(
+    ecs_world_t *world,
+    ecs_query_impl_t *impl,
+    ecs_query_cache_t *cache,
+    void(*callback)(
+        ecs_world_t* world,
+        ecs_id_t id,
+        ecs_query_t *q))
+{
+    ecs_query_t *q = &impl->pub;
+    ecs_term_t *terms = cache->query->terms;
+    int32_t i, count = cache->query->term_count;
+
+    for (i = 0; i < count; i++) {
+        ecs_term_t *term = &terms[i];
+        ecs_term_ref_t *src = &term->src;
+
+        if (src->id & EcsUp) {
+            callback(world, ecs_pair(term->trav, EcsWildcard), q);
+            if (term->trav != EcsIsA) {
+                callback(world, ecs_pair(EcsIsA, EcsWildcard), q);
+            }
+            callback(world, term->id, q);
+
+        } else if (src->id & EcsSelf && !ecs_term_match_this(term)) {
+            ecs_abort(ECS_INTERNAL_ERROR, NULL);
+        }
+    }
+}
+
+/* Iterate over terms in query to initialize necessary bookkeeping. */
+static
+int flecs_query_cache_process_query(
+    ecs_world_t *world,
+    ecs_query_impl_t *impl,
+    ecs_query_cache_t *cache)
+{
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_term_t *terms = cache->query->terms;
+    int32_t i, count = cache->query->term_count;
+
+    for (i = 0; i < count; i ++) {
+        ecs_term_t *term = &terms[i];
+        ecs_term_ref_t *src = &term->src;
+
+        /* Find cascade terms if query has any */
+        if (src->id & EcsCascade) {
+            ecs_assert(cache->cascade_by == 0, ECS_INVALID_PARAMETER,
+                "query can only have one cascade term");
+            cache->cascade_by = i + 1;
+        }
+
+        /* Set the EcsQueryHasRefs flag. Ref fields are fields that can be 
+         * matched on another entity, and can require rematching. */
+        if (src->id & EcsUp) {
+            impl->pub.flags |= EcsQueryHasRefs;
+        }
+    }
+
+    /* Register component monitor for each ref field. */
+    flecs_query_cache_for_each_component_monitor(
+        world, impl, cache, flecs_monitor_register);
+
+    return 0;
+}
+
+/* -- Private API -- */
+
+/* Do bookkeeping after enabling order_by */
+static
+int flecs_query_cache_order_by(
+    ecs_world_t *world,
+    ecs_query_impl_t *impl,
+    ecs_entity_t order_by,
+    ecs_order_by_action_t order_by_callback,
+    ecs_sort_table_action_t action)
+{
+    ecs_check(impl != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_check(cache != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(!ecs_id_is_wildcard(order_by), 
+        ECS_INVALID_PARAMETER, NULL);
+
+    /* Find order_by term & make sure it is queried for */
+    const ecs_query_t *query = cache->query;
+    int32_t i, count = query->term_count;
+    int32_t order_by_term = -1;
+
+    if (order_by) {
+        for (i = 0; i < count; i ++) {
+            const ecs_term_t *term = &query->terms[i];
+            
+            /* Only And terms are supported */
+            if (term->id == order_by && term->oper == EcsAnd) {
+                order_by_term = i;
+                break;
+            }
+        }
+
+        if (order_by_term == -1) {
+            char *id_str = ecs_id_str(world, order_by);
+            ecs_err("order_by component '%s' is not queried for", id_str);
+            ecs_os_free(id_str);
+            goto error;
+        }
+    }
+
+    cache->order_by = order_by;
+    cache->order_by_callback = order_by_callback;
+    cache->order_by_term = order_by_term;
+    cache->order_by_table_callback = action;
+
+    ecs_vec_fini_t(NULL, &cache->table_slices, ecs_query_cache_match_t);
+    flecs_query_cache_sort_tables(world, impl);
+
+    if (!cache->table_slices.array) {
+        flecs_query_cache_build_sorted_tables(cache);
+    }
+
+    return 0;
+error:
+    return -1;
+}
+
+/* Do bookkeeping after enabling group_by */
+static
+void flecs_query_cache_group_by(
+    ecs_query_cache_t *cache,
+    ecs_entity_t sort_component,
+    ecs_group_by_action_t group_by)
+{   
+    ecs_check(cache->group_by == 0, ECS_INVALID_OPERATION,
+        "query is already grouped");
+    ecs_check(cache->group_by_callback == 0, ECS_INVALID_OPERATION,
+        "query is already grouped");
+
+    if (!group_by) {
+        /* Builtin function that groups by relationship */
+        group_by = flecs_query_cache_default_group_by;   
+    }
+
+    cache->group_by = sort_component;
+    cache->group_by_callback = group_by;
+
+    ecs_map_init_w_params(&cache->groups, 
+        &cache->query->world->allocators.query_table_list);
+error:
+    return;
+}
+
+/* Callback for the observer that is subscribed for table events. This function
+ * is the entry point for matching/unmatching new tables with the query. */
+static
+void flecs_query_cache_on_event(
+    ecs_iter_t *it)
+{
+    /* Because this is the observer::run callback, checking if this is event is
+     * already handled is not done for us. */
+    ecs_world_t *world = it->world;
+    ecs_observer_t *o = it->ctx;
+    ecs_observer_impl_t *o_impl = flecs_observer_impl(o);
+    if (o_impl->last_event_id) {
+        if (o_impl->last_event_id[0] == world->event_id) {
+            return;
+        }
+        o_impl->last_event_id[0] = world->event_id;
+    }
+
+    ecs_query_impl_t *impl = o->ctx;
+    flecs_poly_assert(impl, ecs_query_t);
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_table_t *table = it->table;
+    ecs_entity_t event = it->event;
+
+    if (event == EcsOnTableCreate) {
+        /* Creation of new table */
+        if (flecs_query_cache_match_table(world, cache, table)) {
+            if (ecs_should_log_3()) {
+                char *table_str = ecs_table_str(world, table);
+                ecs_dbg_3("query cache event: %s for [%s]", 
+                    ecs_get_name(world, event),
+                    table_str);
+                ecs_os_free(table_str);
+            }
+        }
+        return;
+    }
+
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    /* The observer isn't doing the matching because the query can do it more
+     * efficiently by checking the table with the query cache. */
+    if (ecs_map_get(&cache->tables, table->id) == NULL) {
+        return;
+    }
+
+    if (ecs_should_log_3()) {
+        char *table_str = ecs_table_str(world, table);
+        ecs_dbg_3("query cache event: %s for [%s]", 
+            ecs_get_name(world, event),
+            table_str);
+        ecs_os_free(table_str);
+    }
+
+    if (event == EcsOnTableDelete) {
+        /* Deletion of table */
+        flecs_query_cache_remove_table(cache, table);
+        return;
+    }
+}
+
+/* Create query-specific allocators. The reason these allocators are 
+ * specific to the query is because they depend on the number of terms the
+ * query has. */
+static
+void flecs_query_cache_allocators_init(
+    ecs_query_cache_t *cache)
+{
+    int32_t field_count = cache->query->field_count;
+    if (field_count) {
+        flecs_ballocator_init(&cache->allocators.pointers, 
+            field_count * ECS_SIZEOF(ecs_table_record_t*));
+        flecs_ballocator_init(&cache->allocators.ids, 
+            field_count * ECS_SIZEOF(ecs_id_t));
+        flecs_ballocator_init(&cache->allocators.monitors,
+            (1 + field_count) * ECS_SIZEOF(int32_t));
+    }
+}
+
+/* Free query-specific allocators. */
+static
+void flecs_query_cache_allocators_fini(
+    ecs_query_cache_t *cache)
+{
+    int32_t field_count = cache->query->field_count;
+    if (field_count) {
+        flecs_ballocator_fini(&cache->allocators.pointers);
+        flecs_ballocator_fini(&cache->allocators.ids);
+        flecs_ballocator_fini(&cache->allocators.monitors);
+    }
+}
+
+/* Free cache. */
+void flecs_query_cache_fini(
+    ecs_query_impl_t *impl)
+{
+    ecs_world_t *world = impl->pub.world;
+    ecs_stage_t *stage = impl->stage;
+    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    if (cache->observer) {
+        flecs_observer_fini(cache->observer);
+    }
+
+    ecs_group_delete_action_t on_delete = cache->on_group_delete;
+    if (on_delete) {
+        ecs_map_iter_t it = ecs_map_iter(&cache->groups);
+        while (ecs_map_next(&it)) {
+            ecs_query_cache_group_t *group = ecs_map_ptr(&it);
+            uint64_t group_id = ecs_map_key(&it);
+            on_delete(world, group_id, group->info.ctx, cache->group_by_ctx);
+        }
+        cache->on_group_delete = NULL;
+    }
+
+    if (cache->group_by_ctx_free) {
+        if (cache->group_by_ctx) {
+            cache->group_by_ctx_free(cache->group_by_ctx);
+        }
+    }
+
+    flecs_query_cache_for_each_component_monitor(world, impl, cache,
+        flecs_monitor_unregister);
+
+    flecs_query_cache_remove_all_tables(cache);
+
+    ecs_assert(ecs_map_count(&cache->tables) == 0, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(ecs_map_count(&cache->groups) == 0, ECS_INTERNAL_ERROR, NULL);
+    
+    ecs_map_fini(&cache->tables);
+    ecs_map_fini(&cache->groups);
+    ecs_vec_fini_t(NULL, &cache->table_slices, ecs_query_cache_match_t);
+    
+    if (cache->query->term_count) {
+        flecs_bfree(&cache->allocators.ids, cache->sources);
+    }
+
+    flecs_query_cache_allocators_fini(cache);
+    ecs_query_fini(cache->query);
+
+    flecs_bfree(&stage->allocators.query_cache, cache);
+}
+
+/* Create new cache. */
+ecs_query_cache_t* flecs_query_cache_init(
+    ecs_query_impl_t *impl,
+    const ecs_query_desc_t *const_desc)
+{
+    ecs_world_t *world = impl->pub.real_world;
+    flecs_poly_assert(world, ecs_world_t);
+
+    ecs_stage_t *stage = impl->stage;
+    flecs_poly_assert(stage, ecs_stage_t);
+
+    ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(const_desc != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(const_desc->_canary == 0, ECS_INVALID_PARAMETER,
+        "ecs_query_desc_t was not initialized to zero");
+    ecs_check(!(world->flags & EcsWorldFini), ECS_INVALID_OPERATION, 
+        "cannot create query during world fini");
+
+    /* Create private version of desc to create the uncached query that will
+     * populate the query cache. */
+    ecs_query_desc_t desc = *const_desc;
+    ecs_entity_t entity = desc.entity;
+    desc.cache_kind = EcsQueryCacheNone; /* Don't create caches recursively */
+    desc.group_by_callback = NULL;
+    desc.group_by = 0;
+    desc.order_by_callback = NULL;
+    desc.order_by = 0;
+    desc.entity = 0;
+
+    /* Don't pass ctx/binding_ctx to uncached query */
+    desc.ctx = NULL;
+    desc.binding_ctx = NULL;
+    desc.ctx_free = NULL;
+    desc.binding_ctx_free = NULL;
+
+    ecs_query_cache_t *result = flecs_bcalloc(&stage->allocators.query_cache);
+    result->entity = entity;
+    impl->cache = result;
+
+    ecs_observer_desc_t observer_desc = { .query = desc };
+    observer_desc.query.flags |= EcsQueryNested;
+
+    ecs_flags32_t query_flags = const_desc->flags | world->default_query_flags;
+    desc.flags |= EcsQueryMatchEmptyTables | EcsQueryTableOnly | EcsQueryNested;
+
+    /* order_by is not compatible with matching empty tables, as it causes
+     * a query to return table slices, not entire tables. */
+    if (const_desc->order_by_callback) {
+        query_flags &= ~EcsQueryMatchEmptyTables;
+    }
+
+    ecs_query_t *q = result->query = ecs_query_init(world, &desc);
+    if (!q) {
+        goto error;
+    }
+
+    /* Set flag for trivial caches which allows for faster iteration */
+    if (impl->pub.flags & EcsQueryIsCacheable) {
+        /* Trivial caches may only contain And/Not operators. */
+        int32_t t, count = q->term_count;
+        for (t = 0; t < count; t ++) {
+            if (q->terms[t].oper != EcsAnd && q->terms[t].oper != EcsNot && q->terms[t].oper != EcsOptional) {
+                break;
+            }
+        }
+
+        if ((t == count) && (q->flags & EcsQueryMatchOnlySelf) &&
+           !(q->flags & EcsQueryMatchWildcards))
+        {
+            if (!const_desc->order_by && !const_desc->group_by && 
+                !const_desc->order_by_callback && 
+                !const_desc->group_by_callback &&
+                !(const_desc->flags & EcsQueryDetectChanges))
+            {
+                q->flags |= EcsQueryTrivialCache;
+            }
+        }
+    }
+
+    ecs_size_t elem_size = flecs_query_cache_elem_size(result);
+    ecs_vec_init(&world->allocator, &result->default_group.tables, 
+        elem_size, 0);
+    result->first_group = &result->default_group;
+
+    /* The uncached query used to populate the cache always matches empty 
+     * tables. This flag determines whether the empty tables are stored 
+     * separately in the cache or are treated as regular tables. This is only
+     * enabled if the user requested that the query matches empty tables. */
+    ECS_BIT_COND(q->flags, EcsQueryCacheYieldEmptyTables, 
+        !!(query_flags & EcsQueryMatchEmptyTables));
+
+    flecs_query_cache_allocators_init(result);
+
+    /* Zero'd out sources array that's used for results that only match $this. 
+     * This reduces the amount of memory used by the cache, and improves CPU
+     * cache locality during iteration when doing source checks. */
+    if (result->query->term_count) {
+        result->sources = flecs_bcalloc(&result->allocators.ids);
+    }
+
+    if (q->term_count) {
+        observer_desc.run = flecs_query_cache_on_event;
+        observer_desc.ctx = impl;
+
+        int32_t event_index = 0;
+        observer_desc.events[event_index ++] = EcsOnTableCreate;
+        observer_desc.events[event_index ++] = EcsOnTableDelete;
+        observer_desc.flags_ = EcsObserverBypassQuery;
+
+        /* ecs_query_init could have moved away resources from the terms array
+         * in the descriptor, so use the terms array from the query. */
+        ecs_os_memcpy_n(observer_desc.query.terms, q->terms, 
+            ecs_term_t, q->term_count);
+        observer_desc.query.expr = NULL; /* Already parsed */
+
+        result->observer = flecs_observer_init(world, entity, &observer_desc);
+        if (!result->observer) {
+            goto error;
+        }
+    }
+
+    result->prev_match_count = -1;
+
+    if (ecs_should_log_1()) {
+        char *query_expr = ecs_query_str(result->query);
+        ecs_dbg_1("#[green]query#[normal] [%s] created", 
+            query_expr ? query_expr : "");
+        ecs_os_free(query_expr);
+    }
+
+    ecs_log_push_1();
+
+    if (flecs_query_cache_process_query(world, impl, result)) {
+        goto error;
+    }
+
+    /* Group before matching so we won't have to move tables around later */
+    int32_t cascade_by = result->cascade_by;
+    if (cascade_by) {
+        flecs_query_cache_group_by(result, result->query->terms[cascade_by - 1].id,
+            flecs_query_cache_group_by_cascade);
+        result->group_by_ctx = &result->query->terms[cascade_by - 1];
+    }
+
+    if (const_desc->group_by_callback || const_desc->group_by) {
+        ecs_check(!result->cascade_by, ECS_INVALID_PARAMETER,
+            "cannot mix cascade and group_by");
+        flecs_query_cache_group_by(result, 
+            const_desc->group_by, const_desc->group_by_callback);
+        result->group_by_ctx = const_desc->group_by_ctx;
+        result->on_group_create = const_desc->on_group_create;
+        result->on_group_delete = const_desc->on_group_delete;
+        result->group_by_ctx_free = const_desc->group_by_ctx_free;
+    }
+
+    ecs_map_init(&result->tables, &world->allocator);
+    flecs_query_cache_match_tables(world, result);
+
+    if (const_desc->order_by_callback) {
+        if (flecs_query_cache_order_by(world, impl, 
+            const_desc->order_by, const_desc->order_by_callback,
+            const_desc->order_by_table_callback))
+        {
+            goto error;
+        }
+    }
+
+    if (entity) {
+        if (!ecs_map_count(&result->tables) && result->query->term_count){
+            ecs_add_id(world, entity, EcsEmpty);
+        }
+    }
+
+    ecs_log_pop_1();
+
+    return result;
+error:
+    return NULL;
+}
+
+/**
+ * @file query/cache/change_detection.c
+ * @brief Query change detection implementation.
+ */
+
+
+typedef struct {
+    ecs_table_t *table;
+    int32_t column;
+} flecs_table_column_t;
+
+/* Get table column index for query field. */
+static
+void flecs_query_get_column_for_field(
+    const ecs_query_t *q,
+    ecs_query_cache_match_t *match,
+    int32_t field,
+    flecs_table_column_t *out)
+{
+    ecs_assert(field >= 0, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(field < q->field_count, ECS_INTERNAL_ERROR, NULL);
+    (void)q;
+
+    const ecs_table_record_t *tr = match->base.trs[field];
+    ecs_table_t *table = tr->hdr.table;
+    int32_t column = tr->column;
+
+    out->table = table;
+    out->column = column;
+}
+
+/* Get match monitor. Monitors are used to keep track of whether components 
+ * matched by the query in a table have changed. */
+static
+bool flecs_query_get_match_monitor(
+    ecs_query_impl_t *impl,
+    ecs_query_cache_match_t *match)
+{
+    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    bool is_trivial = flecs_query_cache_is_trivial(cache);
+    ecs_assert(!is_trivial, ECS_INVALID_OPERATION, 
+        "query was not created with change detection enabled");
+
+    if (match->_monitor) {
+        return false;
+    }
+
+    int32_t *monitor = flecs_balloc(&cache->allocators.monitors);
+    monitor[0] = 0;
+
+    /* Mark terms that don't need to be monitored. This saves time when reading
+     * and/or updating the monitor. */
+    const ecs_query_t *q = cache->query;
+    int32_t i, field = -1, term_count = q->term_count;
+    flecs_table_column_t tc;
+
+    for (i = 0; i < term_count; i ++) {
+        if (field == q->terms[i].field_index) {
+            if (monitor[field + 1] != -1) {
+                continue;
+            }
+        }
+
+        field = q->terms[i].field_index;
+        monitor[field + 1] = -1;
+
+        /* If term isn't read, don't monitor */
+        if (q->terms[i].inout != EcsIn && 
+            q->terms[i].inout != EcsInOut &&
+            q->terms[i].inout != EcsInOutDefault) {
+            continue;
+        }
+
+        /* Don't track fields that aren't set */
+        if (!is_trivial) {
+            if (!(match->base.set_fields & (1llu << field))) {
+                continue;
+            }
+        }
+
+        flecs_query_get_column_for_field(q, match, field, &tc);
+        if (tc.column == -1) {
+            continue; /* Don't track terms that aren't stored */
+        }
+
+        monitor[field + 1] = 0;
+    }
+
+    match->_monitor = monitor;
+
+    impl->pub.flags |= EcsQueryHasChangeDetection;
+
+    return true;
+}
+
+/* Get monitor for fixed query terms. Fixed terms are handled separately as they
+ * don't require a query cache, and fixed terms aren't stored in the cache. */
+static
+bool flecs_query_get_fixed_monitor(
+    ecs_query_impl_t *impl,
+    bool check)
+{
+    ecs_query_t *q = &impl->pub;
+    ecs_world_t *world = q->real_world;
+    ecs_term_t *terms = q->terms;
+    int32_t i, term_count = q->term_count;
+
+    if (!impl->monitor) {
+        impl->monitor = flecs_alloc_n(&impl->stage->allocator, 
+            int32_t, q->field_count);
+        check = false; /* If the monitor is new, initialize it with dirty state */
+    }
+
+    for (i = 0; i < term_count; i ++) {
+        ecs_term_t *term = &terms[i];
+        int16_t field_index = term->field_index;
+
+        if (!(q->read_fields & flecs_ito(uint32_t, 1 << field_index))) {
+            continue; /* If term doesn't read data there's nothing to track */
+        }
+
+        if (!(term->src.id & EcsIsEntity)) {
+            continue; /* Not a term with a fixed source */
+        }
+
+        ecs_entity_t src = ECS_TERM_REF_ID(&term->src);
+        ecs_assert(src != 0, ECS_INTERNAL_ERROR, NULL);
+
+        ecs_record_t *r = flecs_entities_get(world, src);
+        if (!r || !r->table) {
+            continue; /* Entity is empty, nothing to track */
+        }
+
+        ecs_component_record_t *cr = flecs_components_get(world, term->id);
+        if (!cr) {
+            continue; /* If id doesn't exist, entity can't have it */
+        }
+
+        const ecs_table_record_t *tr = flecs_component_get_table(cr, r->table);
+        if (!tr) {
+            continue; /* Entity doesn't have the component */
+        }
+
+        /* Copy/check column dirty state from table */
+        int32_t *dirty_state = flecs_table_get_dirty_state(world, r->table);
+        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        if (!check) {
+            impl->monitor[field_index] = dirty_state[tr->column + 1];
+        } else {
+            if (impl->monitor[field_index] != dirty_state[tr->column + 1]) {
+                return true;
+            }
+        }
+    }
+
+    return !check;
+}
+
+/* Synchronize fixed source monitor */
+bool flecs_query_update_fixed_monitor(
+    ecs_query_impl_t *impl)
+{
+    return flecs_query_get_fixed_monitor(impl, false);
+}
+
+/* Compare fixed source monitor */
+bool flecs_query_check_fixed_monitor(
+    ecs_query_impl_t *impl)
+{
+    return flecs_query_get_fixed_monitor(impl, true);
+}
+
+/* Check if single match term has changed */
+static
+bool flecs_query_check_match_monitor_term(
+    ecs_query_impl_t *impl,
+    ecs_query_cache_match_t *match,
+    int32_t field)
+{
+    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(!flecs_query_cache_is_trivial(cache), ECS_INVALID_OPERATION, 
+        "query was not created with change detection enabled");
+
+    if (flecs_query_get_match_monitor(impl, match)) {
+        return true;
+    }
+
+    int32_t *monitor = match->_monitor;
+    int32_t state = monitor[field];
+    if (state == -1) {
+        return false;
+    }
+
+    ecs_table_t *table = match->base.table;
+    if (table) {
+        int32_t *dirty_state = flecs_table_get_dirty_state(
+            cache->query->world, table);
+        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
+        if (!field) {
+            return monitor[0] != dirty_state[0];
+        }
+    } else if (!field) {
+        return false;
+    }
+
+    flecs_table_column_t cur;
+    flecs_query_get_column_for_field(
+        &impl->pub, match, field - 1, &cur);
+    ecs_assert(cur.column != -1, ECS_INTERNAL_ERROR, NULL);
+
+    return monitor[field] != flecs_table_get_dirty_state(
+        cache->query->world, cur.table)[cur.column + 1];
+}
+
+/* Check if any tables in the cache changed. */
+static
+bool flecs_query_check_cache_monitor(
+    ecs_query_impl_t *impl)
+{
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    /* If the match count changed, tables got matched/unmatched for the
+     * cache, so return that the query has changed. */
+    if (cache->match_count != cache->prev_match_count) {
+        return true;
+    }
+
+    const ecs_query_cache_group_t *cur = cache->first_group;
+    do {
+        int32_t i, count = ecs_vec_count(&cur->tables);
+        for (i = 0; i < count; i ++) {
+            ecs_query_cache_match_t *qm = 
+                ecs_vec_get_t(&cur->tables, ecs_query_cache_match_t, i);
+            if (flecs_query_check_table_monitor(impl, qm, -1)) {
+                return true;
+            }
+
+            if (qm->wildcard_matches) {
+                ecs_query_cache_match_t *wc_qms = 
+                    ecs_vec_first(qm->wildcard_matches);
+                int32_t j, wc_count = ecs_vec_count(qm->wildcard_matches);
+                for (j = 0; j < wc_count; j ++) {
+                    if (flecs_query_check_table_monitor(impl, &wc_qms[j], -1)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    } while ((cur = cur->next));
+
+    return false;
+}
+
+/* Initialize monitors for the elements in the query cache. */
+static
+void flecs_query_init_query_monitors(
+    ecs_query_impl_t *impl)
+{
+    /* Change monitor for cache */
+    ecs_query_cache_t *cache = impl->cache;
+    if (cache) {
+        const ecs_query_cache_group_t *cur = cache->first_group;
+        do {
+            int32_t i, count = ecs_vec_count(&cur->tables);
+            for (i = 0; i < count; i ++) {
+                ecs_query_cache_match_t *qm = 
+                    ecs_vec_get_t(&cur->tables, ecs_query_cache_match_t, i);
+                flecs_query_get_match_monitor(impl, qm);
+
+                if (qm->wildcard_matches) {
+                    ecs_query_cache_match_t *wc_qms = 
+                        ecs_vec_first(qm->wildcard_matches);
+                    int32_t j, wc_count = ecs_vec_count(qm->wildcard_matches);
+                    for (j = 0; j < wc_count; j ++) {
+                        flecs_query_get_match_monitor(impl, &wc_qms[j]);
+                    }
+                }
+            }
+        } while ((cur = cur->next));
+    }
+}
+
+/* Check if a specific match (table) has changed. */
+static
+bool flecs_query_check_match_monitor(
+    ecs_query_impl_t *impl,
+    ecs_query_cache_match_t *match,
+    const ecs_iter_t *it)
+{
+    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(!flecs_query_cache_is_trivial(cache), ECS_INVALID_OPERATION, 
+        "query was not created with change detection enabled");
+
+    if (flecs_query_get_match_monitor(impl, match)) {
+        return true;
+    }
+
+    int32_t *monitor = match->_monitor;
+    ecs_table_t *table = match->base.table;
+    int32_t *dirty_state = NULL;
+    if (table) {
+        dirty_state = flecs_table_get_dirty_state(
+            cache->query->world, table);
+        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
+        if (monitor[0] != dirty_state[0]) {
+            return true;
+        }
+    }
+
+    const ecs_query_t *query = cache->query;
+    ecs_world_t *world = query->world;
+    int32_t i, field_count = query->field_count; 
+    const ecs_table_record_t **trs = it ? it->trs : match->base.trs;
+    bool trivial_cache = flecs_query_cache_is_trivial(cache);
+
+    ecs_entity_t *sources = NULL;
+    ecs_flags64_t set_fields = 0;
+
+    if (it) {
+        set_fields = it->set_fields;
+    } else if (!trivial_cache) {
+        set_fields = match->base.set_fields;
+    } else {
+        set_fields = (1llu << field_count) - 1;
+    }
+
+    if (!trivial_cache) {
+        sources = match->_sources;
+    }
+
+    ecs_assert(trs != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    for (i = 0; i < field_count; i ++) {
+        int32_t mon = monitor[i + 1];
+        if (mon == -1) {
+            continue;
+        }
+
+        if (!(set_fields & (1llu << i))) {
+            continue;
+        }
+
+        int32_t column = trs[i]->column;
+        ecs_entity_t src = sources ? sources[i] : 0;
+        if (!src) {
+            if (column >= 0) {
+                /* owned component */
+                ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
+                if (mon != dirty_state[column + 1]) {
+                    return true;
+                }
+                continue;
+            } else if (column == -1) {
+                continue; /* owned but not a component */
+            }
+        }
+
+        if (trivial_cache) {
+            continue;
+        }
+
+        /* Component from non-this source */
+        ecs_assert(match->_sources != NULL, ECS_INTERNAL_ERROR, NULL);
+        ecs_entity_t fixed_src = match->_sources[i];
+        ecs_table_t *src_table = ecs_get_table(world, fixed_src);
+        ecs_assert(src_table != NULL, ECS_INTERNAL_ERROR, NULL);
+        int32_t *src_dirty_state = flecs_table_get_dirty_state(
+            world, src_table);
+        if (mon != src_dirty_state[column + 1]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* Check if one or more fields of a specific match have changed. */
+static
+bool flecs_query_check_table_monitor_match(
+    ecs_query_impl_t *impl,
+    ecs_query_cache_match_t *qm,
+    int32_t field)
+{
+    if (field == -1) {
+        if (flecs_query_check_match_monitor(impl, qm, NULL)) {
+            return true;
+        }
+    } else {
+        if (flecs_query_check_match_monitor_term(impl, qm, field)) {
+            return true;
+        } 
+    }
+
+    return false;
+}
+
+/* Compare cache monitor with table dirty state to detect changes */
+bool flecs_query_check_table_monitor(
+    ecs_query_impl_t *impl,
+    ecs_query_cache_match_t *qm,
+    int32_t field)
+{
+    if (flecs_query_check_table_monitor_match(impl, qm, field)) {
+        return true;
+    }
+
+    if (qm->wildcard_matches) {
+        ecs_query_cache_match_t *wc_qms = ecs_vec_first(qm->wildcard_matches);
+        int32_t i, count = ecs_vec_count(qm->wildcard_matches);
+        for (i = 0; i < count; i ++) {
+            if (flecs_query_check_table_monitor_match(impl, &wc_qms[i], field)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/* Mark iterated out fields dirty */
+void flecs_query_mark_fields_dirty(
+    ecs_query_impl_t *impl,
+    ecs_iter_t *it)
+{
+    ecs_query_t *q = &impl->pub;
+
+    /* Evaluate all writeable non-fixed fields, set fields */
+    ecs_termset_t write_fields = 
+        (ecs_termset_t)(q->write_fields & ~q->fixed_fields & it->set_fields);
+    if (!write_fields || (it->flags & EcsIterNoData)) {
+        return;
+    }
+
+    ecs_world_t *world = q->real_world;
+    int16_t i, field_count = q->field_count;
+    for (i = 0; i < field_count; i ++) {
+        ecs_termset_t field_bit = (ecs_termset_t)(1u << i);
+        if (!(write_fields & field_bit)) {
+            continue; /* If term doesn't write data there's nothing to track */
+        }
+
+        ecs_entity_t src = it->sources[i];
+        ecs_table_t *table;
+        if (!src) {
+            table = it->table;
+        } else {
+            ecs_record_t *r = flecs_entities_get(world, src);
+            if (!r || !(table = r->table)) {
+                continue;
+            }
+
+            if (q->shared_readonly_fields & flecs_ito(uint32_t, 1 << i)) {
+                /* Shared fields that aren't marked explicitly as out/inout 
+                 * default to readonly */
+                continue;
+            }
+        }
+
+        const ecs_table_record_t *tr = it->trs[i];
+        if (!tr) {
+            continue; /* Non-fragmenting component */
+        }
+
+        int32_t type_index = it->trs[i]->index;
+        ecs_assert(type_index >= 0, ECS_INTERNAL_ERROR, NULL);
+        
+        ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
+        int32_t *dirty_state = table->dirty_state;
+        if (!dirty_state) {
+            continue;
+        }
+
+        ecs_assert(type_index < table->type.count, ECS_INTERNAL_ERROR, NULL);
+        int32_t column = table->column_map[type_index];
+        dirty_state[column + 1] ++;
+    }
+}
+
+/* Mark out fields with fixed source dirty */
+void flecs_query_mark_fixed_fields_dirty(
+    ecs_query_impl_t *impl,
+    ecs_iter_t *it)
+{
+    /* This function marks fields dirty for terms with fixed sources. */
+    ecs_query_t *q = &impl->pub;
+    ecs_termset_t fixed_write_fields = q->write_fields & q->fixed_fields;
+    if (!fixed_write_fields) {
+        return;
+    }
+
+    ecs_world_t *world = q->real_world;
+    int32_t i, field_count = q->field_count;
+    for (i = 0; i < field_count; i ++) {
+        if (!(fixed_write_fields & flecs_ito(uint32_t, 1 << i))) {
+            continue; /* If term doesn't write data there's nothing to track */
+        }
+
+        ecs_entity_t src = it->sources[i];
+        ecs_assert(src != 0, ECS_INTERNAL_ERROR, NULL);
+        ecs_record_t *r = flecs_entities_get(world, src);
+        ecs_table_t *table;
+        if (!r || !(table = r->table)) {
+            /* If the field is optional, it's possible that it didn't match */
+            continue;
+        }
+
+        int32_t *dirty_state = table->dirty_state;
+        if (!dirty_state) {
+            continue;
+        }
+
+        ecs_assert(it->trs[i]->column >= 0, ECS_INTERNAL_ERROR, NULL);
+        int32_t column = table->column_map[it->trs[i]->column];
+        dirty_state[column + 1] ++;
+    }
+}
+
+/* Synchronize cache monitor with table dirty state */
+void flecs_query_sync_match_monitor(
+    ecs_query_impl_t *impl,
+    ecs_query_cache_match_t *match)
+{
+    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(!flecs_query_cache_is_trivial(cache), ECS_INVALID_OPERATION, 
+        "query was not created with change detection enabled");
+
+    if (!match->_monitor) {
+        if (impl->pub.flags & EcsQueryHasChangeDetection) {
+            flecs_query_get_match_monitor(impl, match);
+        } else {
+            return;
+        }
+    }
+
+    int32_t *monitor = match->_monitor;
+    ecs_table_t *table = match->base.table;
+    if (table) {
+        int32_t *dirty_state = flecs_table_get_dirty_state(
+            cache->query->world, table);
+        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
+        monitor[0] = dirty_state[0]; /* Did table gain/lose entities */
+    }
+
+    ecs_query_t *q = cache->query;
+    {
+        flecs_table_column_t tc;
+        int32_t t, term_count = q->term_count;
+        for (t = 0; t < term_count; t ++) {
+            int32_t field = q->terms[t].field_index;
+            if (monitor[field + 1] == -1) {
+                continue;
+            }
+
+            flecs_query_get_column_for_field(q, match, field, &tc);
+
+            /* Query for cache should never point to stage */
+            ecs_assert(q->world == q->real_world, ECS_INTERNAL_ERROR, NULL);
+
+            monitor[field + 1] = flecs_table_get_dirty_state(
+                q->world, tc.table)[tc.column + 1];
+        }
+    }
+
+    cache->prev_match_count = cache->match_count;
+}
+
+/* Public API call to check if any matches in the query have changed. */
+bool ecs_query_changed(
+    ecs_query_t *q)
+{
+    flecs_poly_assert(q, ecs_query_t);
+    ecs_query_impl_t *impl = flecs_query_impl(q);
+
+    ecs_assert(q->cache_kind != EcsQueryCacheNone, ECS_INVALID_OPERATION, 
+        "change detection is only supported on cached queries");
+
+    if (q->read_fields & q->fixed_fields) {
+        if (!impl->monitor) {
+            /* Create change monitor for fixed fields */
+            flecs_query_get_fixed_monitor(impl, false);
+        }
+    }
+
+    /* If query reads terms with fixed sources, check those first as that's 
+     * cheaper than checking entries in the cache. */
+    if (impl->monitor) {
+        if (flecs_query_check_fixed_monitor(impl)) {
+            return true;
+        }
+    }
+
+    /* Check cache for changes. We can't detect changes for terms that are not
+     * cached/cacheable and don't have a fixed source, since that requires 
+     * storing state per result, which doesn't happen for uncached queries. */
+    if (impl->cache) {
+        if (!(impl->pub.flags & EcsQueryHasChangeDetection)) {
+            flecs_query_init_query_monitors(impl);
+        }
+
+        /* Check cache entries for changes */
+        return flecs_query_check_cache_monitor(impl);
+    }
+
+    return false;
+}
+
+/* Public API call to check if the currently iterated result has changed. */
+bool ecs_iter_changed(
+    ecs_iter_t *it)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it->next == ecs_query_next, ECS_UNSUPPORTED, NULL);
+    ecs_check(ECS_BIT_IS_SET(it->flags, EcsIterIsValid), 
+        ECS_INVALID_PARAMETER, NULL);
+
+    ecs_query_impl_t *impl = flecs_query_impl(it->query);
+    ecs_query_t *q = &impl->pub;
+
+    /* First check for changes for terms with fixed sources, if query has any */
+    if (q->read_fields & q->fixed_fields) {
+        /* Detecting changes for uncached terms is costly, so only do it once 
+         * per iteration. */
+        if (!(it->flags & EcsIterFixedInChangeComputed)) {
+            it->flags |= EcsIterFixedInChangeComputed;
+            ECS_BIT_COND(it->flags, EcsIterFixedInChanged, 
+                flecs_query_check_fixed_monitor(impl));
+        }
+
+        if (it->flags & EcsIterFixedInChanged) {
+            return true;
+        }
+    }
+
+    /* If query has a cache, check for changes in current matched result */
+    if (impl->cache) {
+        ecs_query_cache_match_t *qm = 
+            (ecs_query_cache_match_t*)it->priv_.iter.query.elem;
+        ecs_check(qm != NULL, ECS_INVALID_PARAMETER, NULL);
+        return flecs_query_check_match_monitor(impl, qm, it);
+    }
+
+error:
+    return false;
+}
+
+/* Public API call for skipping change detection (don't mark fields dirty) */
+void ecs_iter_skip(
+    ecs_iter_t *it)
+{
+    ecs_assert(it->next == ecs_query_next, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(ECS_BIT_IS_SET(it->flags, EcsIterIsValid), 
+        ECS_INVALID_PARAMETER, NULL);
+    it->flags |= EcsIterSkip;
+}
+
+/**
+ * @file query/cache/group.c
+ * @brief Adding/removing tables to query groups.
+ */
+
+
+/* Get group id for table. */
+static
+uint64_t flecs_query_cache_get_group_id(
+    const ecs_query_cache_t *cache,
+    ecs_table_t *table)
+{
+    if (cache->group_by_callback) {
+        return cache->group_by_callback(cache->query->world, table, 
+            cache->group_by, cache->group_by_ctx);
+    } else {
+        return 0;
+    }
+}
+
+/* Get group for group id. */
+ecs_query_cache_group_t* flecs_query_cache_get_group(
+    const ecs_query_cache_t *cache,
+    uint64_t group_id)
+{
+    if (!group_id) {
+        return ECS_CONST_CAST(ecs_query_cache_group_t*, &cache->default_group);
+    }
+
+    return ecs_map_get_deref(
+        &cache->groups, ecs_query_cache_group_t, group_id);
+}
+
+/* Insert group in list that's ordered by group id */
+static
+void flecs_query_cache_group_insert(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_group_t *group) 
+{
+    bool desc = false; /* Descending order */
+    if (cache->cascade_by) {
+        desc = (cache->query->terms[
+            cache->cascade_by - 1].src.id & EcsDesc) != 0;
+    }
+
+    if (!group->info.id) {
+        /* Default group is always inserted */
+        return;
+    }
+
+    ecs_query_cache_group_t *cur = cache->first_group, *prev = NULL;
+    do {
+        ecs_assert(cur->info.id != group->info.id, ECS_INTERNAL_ERROR, NULL);
+        bool insert = cur->info.id > group->info.id;
+        if (desc) {
+            insert = !insert; /* Works since ids can't be the same. */
+        }
+
+        if (insert) {
+            if (prev) {
+                prev->next = group;
+            } else {
+                cache->first_group = group;
+            }
+            group->next = cur;
+            return;
+        }
+
+        prev = cur;
+    } while ((cur = cur->next));
+
+    prev->next = group;
+    ecs_assert(group->next == NULL, ECS_INTERNAL_ERROR, NULL);
+}
+
+/* Make sure a group exists for the provided group id. */
+static
+ecs_query_cache_group_t* flecs_query_cache_ensure_group(
+    ecs_query_cache_t *cache,
+    uint64_t group_id)
+{
+    if (!group_id) {
+        return &cache->default_group;
+    }
+
+    ecs_query_cache_group_t *group = ecs_map_get_deref(&cache->groups, 
+        ecs_query_cache_group_t, group_id);
+
+    if (!group) {
+        group = ecs_map_insert_alloc_t(&cache->groups, 
+            ecs_query_cache_group_t, group_id);
+        ecs_os_zeromem(group);
+
+        ecs_allocator_t *a = &cache->query->real_world->allocator;
+        if (flecs_query_cache_is_trivial(cache)) {
+            ecs_vec_init_t(a, &group->tables, ecs_query_triv_cache_match_t, 0);
+        } else {
+            ecs_vec_init_t(a, &group->tables, ecs_query_cache_match_t, 0);
+        }
+
+        group->info.id = group_id;
+
+        flecs_query_cache_group_insert(cache, group);
+
+        if (cache->on_group_create) {
+            group->info.ctx = cache->on_group_create(
+                cache->query->world, group_id, cache->group_by_ctx);
+        }
+    }
+
+    return group;
+}
+
+/* Free group resources. */
+static
+void flecs_query_cache_group_fini(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_group_t *group)
+{
+    if (cache->on_group_delete) {
+        cache->on_group_delete(cache->query->world, group->info.id,
+            group->info.ctx, cache->group_by_ctx);
+    }
+
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+    ecs_vec_fini(a, &group->tables, elem_size);
+
+    if (group != &cache->default_group) {
+        ecs_map_remove_free(&cache->groups, group->info.id);
+    }
+}
+
+/* Remove group from cache. */
+static
+void flecs_query_cache_remove_group(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_group_t *group)
+{
+    ecs_query_cache_group_t *cur = cache->first_group, *prev = NULL;
+
+    do {
+        if (cur == group) {
+            if (prev) {
+                prev->next = group->next;
+            } else {
+                cache->first_group = group->next;
+            }
+            break;
+        }
+        
+        prev = cur;
+    } while ((cur = cur->next));
+
+    /* ensure group was found */
+    ecs_assert(cur != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    if (!cache->first_group) {
+        cache->first_group = &cache->default_group;
+    }
+
+    flecs_query_cache_group_fini(cache, group);
+}
+
+/* Get cache entry for table. */
+ecs_query_cache_table_t* flecs_query_cache_get_table(
+    const ecs_query_cache_t *cache,
+    ecs_table_t *table)
+{
+    return ecs_map_get_ptr(&cache->tables, table->id);
+}
+
+/* Get match for table cache entry. */
+ecs_query_cache_match_t* flecs_query_cache_match_from_table(
+    const ecs_query_cache_t *cache,
+    const ecs_query_cache_table_t *qt)
+{
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    return ecs_vec_get(&qt->group->tables, elem_size, qt->index);
+}
+
+/* Add table to query group. */
+static
+ecs_query_cache_match_t* flecs_query_cache_add_table_to_group(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_group_t *group,
+    ecs_query_cache_table_t *qt,
+    ecs_table_t *table)
+{
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+
+    ecs_query_cache_match_t *result = ecs_vec_append(
+        a, &group->tables, elem_size);
+    ecs_os_memset(result, 0, elem_size);
+    result->base.table = table;
+
+    qt->group = group;
+    qt->index = ecs_vec_count(&group->tables) - 1;
+
+    group->info.table_count ++;
+    group->info.match_count ++;
+    cache->match_count ++;
+
+    return result;
+}
+
+/* Remove table from query group. */
+static
+void flecs_query_cache_remove_table_from_group(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_group_t *group,
+    int32_t index)
+{
+    cache->match_count ++;
+
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    ecs_vec_remove(&group->tables, elem_size, index);
+    int32_t count = ecs_vec_count(&group->tables);
+
+    if (!count) {
+        flecs_query_cache_remove_group(cache, group);
+        return;
+    }
+
+    if (index != count) {
+        /* The element now points to the previously last table in the group. 
+         * Update the entry of that table to the new index. */
+        ecs_query_cache_match_t *match = ecs_vec_get(
+            &group->tables, elem_size, index);
+        ecs_query_cache_table_t *qt_other = flecs_query_cache_get_table(
+            cache, match->base.table);
+        ecs_assert(qt_other != NULL, ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(qt_other->index == ecs_vec_count(&group->tables), 
+            ECS_INTERNAL_ERROR, NULL);
+        qt_other->index = index;
+    }
+
+    group->info.table_count --;
+    group->info.match_count ++;
+}
+
+/* Add matched table to cache. */
+ecs_query_cache_match_t* flecs_query_cache_add_table(
+    ecs_query_cache_t *cache,
+    ecs_table_t *table)
+{
+    ecs_assert(ecs_map_get(&cache->tables, table->id) == NULL, 
+        ECS_INTERNAL_ERROR, NULL);
+
+    if (!ecs_map_count(&cache->tables) && cache->entity) {
+        ecs_remove_id(cache->query->world, cache->entity, EcsEmpty);
+    }
+
+    uint64_t group_id = flecs_query_cache_get_group_id(cache, table);
+
+    ecs_query_cache_group_t *group = flecs_query_cache_ensure_group(
+        cache, group_id);
+    ecs_assert(group != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+
+    ecs_query_cache_table_t *qt = flecs_alloc_t(a, ecs_query_cache_table_t);
+    qt->group = group;
+    qt->index = ecs_vec_count(&group->tables);
+    ecs_map_insert_ptr(&cache->tables, table->id, qt);
+
+    return flecs_query_cache_add_table_to_group(cache, group, qt, table);
+}
+
+/* Move table to a different group. This can happen if the value returned by 
+ * group_by_callback changed for a table. Typically called during rematch. */
+static
+void flecs_query_cache_move_table_to_group(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_table_t *qt,
+    ecs_query_cache_group_t *group)
+{
+    ecs_query_cache_match_t *src_match = 
+        flecs_query_cache_match_from_table(cache, qt);
+
+    /* Cache values of previous group since add_table_to_group will modify qt */
+    ecs_query_cache_group_t *src_group = qt->group;
+    int32_t src_index = qt->index;
+
+    ecs_table_t *table = src_match->base.table;
+
+    /* Add table to new group */
+    ecs_query_cache_match_t *dst_match = 
+        flecs_query_cache_add_table_to_group(cache, group, qt, table);
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    ecs_os_memcpy(dst_match, src_match, elem_size);
+    ecs_assert(qt->group == group, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(flecs_query_cache_match_from_table(cache, qt) == dst_match, 
+        ECS_INTERNAL_ERROR, NULL);
+    
+    /* Remove table from old group */
+    flecs_query_cache_remove_table_from_group(cache, src_group, src_index);
+}
+
+/* Make sure a cache entry exists for table. */
+ecs_query_cache_match_t* flecs_query_cache_ensure_table(
+    ecs_query_cache_t *cache,
+    ecs_table_t *table)
+{
+    ecs_query_cache_table_t *qt = flecs_query_cache_get_table(cache, table);
+    if (qt) {
+        /* Ensure existing table is in the right group */
+        if (cache->group_by_callback) {
+            uint64_t group_id = flecs_query_cache_get_group_id(cache, table);
+            ecs_query_cache_group_t *group = flecs_query_cache_ensure_group(
+                cache, group_id);
+            ecs_assert(group != NULL, ECS_INTERNAL_ERROR, NULL);
+
+            if (group != qt->group) {
+                flecs_query_cache_move_table_to_group(cache, qt, group);
+            }
+        }
+
+        return flecs_query_cache_match_from_table(cache, qt);
+    }
+
+    return flecs_query_cache_add_table(cache, table);
+}
+
+/* Remove matched table from cache. */
+void flecs_query_cache_remove_table(
+    ecs_query_cache_t *cache,
+    ecs_table_t *table)
+{
+    ecs_query_cache_table_t *qt = flecs_query_cache_get_table(cache, table);
+    if (!qt) {
+        return;
+    }
+
+    ecs_query_cache_group_t *group = qt->group;
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+
+    ecs_query_cache_match_t *match = ecs_vec_get(
+        &group->tables, elem_size, qt->index);
+
+    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(match->base.table != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(match->base.table->id == table->id, ECS_INTERNAL_ERROR, NULL);
+
+    flecs_query_cache_match_fini(cache, match);
+
+    flecs_query_cache_remove_table_from_group(cache, group, qt->index);
+
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+    flecs_free_t(a, ecs_query_cache_table_t, qt);
+
+    ecs_map_remove(&cache->tables, table->id);
+}
+
+/* Remove all groups from the cache. Typically called during query cleanup. */
+static
+void flecs_query_cache_remove_all_groups(
+    ecs_query_cache_t *cache)
+{
+    ecs_query_cache_group_t *cur = cache->first_group, *next = cur;
+
+    while ((cur = next)) {
+        next = cur->next;
+        flecs_query_cache_group_fini(cache, cur);
+    }
+
+    cache->first_group = &cache->default_group;
+    cache->default_group.next = NULL;
+}
+
+/* Remove all tables from the cache. Typically called during query cleanup. */
+void flecs_query_cache_remove_all_tables(
+    ecs_query_cache_t *cache)
+{
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+
+    ecs_query_cache_group_t *cur = cache->first_group;
+    do {
+        int32_t i, count = ecs_vec_count(&cur->tables);
+        for (i = 0; i < count; i ++) {
+            flecs_query_cache_match_fini(
+                cache, ecs_vec_get(&cur->tables, elem_size, i));
+        }
+
+        ecs_vec_fini(a, &cur->tables, elem_size);
+    } while ((cur = cur->next));
+
+    ecs_map_iter_t it = ecs_map_iter(&cache->tables);
+    while (ecs_map_next(&it)) {
+        ecs_query_cache_table_t *qt = ecs_map_ptr(&it);
+        flecs_free_t(a, ecs_query_cache_table_t, qt);
+    }
+
+    ecs_map_clear(&cache->tables);
+
+    flecs_query_cache_remove_all_groups(cache);
+
+    ecs_assert(ecs_map_count(&cache->groups) == 0, ECS_INTERNAL_ERROR, NULL);
+}
+
+/**
+ * @file query/cache/iter.c
+ * @brief Cache iterator functions.
+ */
+
+
+/* Update trs for cached query that has up fields. If a component got matched on
+ * another entity (typically a parent or prefab), that component could have 
+ * moved which would cause the table record in the trs array to become invalid.
+ * This function updates the table records array to make sure they're pointing
+ * to the right table/column for fields that used up traversal. */
+static
+void flecs_query_update_node_up_trs(
+    const ecs_query_run_ctx_t *ctx,
+    ecs_query_cache_match_t *node)
+{
+    const ecs_query_impl_t *impl = ctx->query;
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(!flecs_query_cache_is_trivial(cache), ECS_INTERNAL_ERROR, NULL);
+
+    ecs_termset_t fields = node->_up_fields & node->base.set_fields;
+    if (fields) {
+        const ecs_query_t *q = cache->query;
+        int32_t f, field_count = q->field_count;
+        int8_t *field_map = cache->field_map;
+        for (f = 0; f < field_count; f ++) {
+            if (!(fields & (1llu << f))) {
+                continue;
+            }
+
+            ecs_entity_t src = node->_sources[f];
+            if (src) {
+                ecs_record_t *r = flecs_entities_get(ctx->world, src);
+                ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
+                ecs_assert(r->table != NULL, ECS_INTERNAL_ERROR, NULL);
+                if (r->table != node->_tables[f]) {
+                    ecs_component_record_t *cr = flecs_components_get(
+                        ctx->world, q->ids[f]);
+                    const ecs_table_record_t *tr = node->base.trs[f] = 
+                        flecs_component_get_table(cr, r->table);
+                    ecs_assert(tr != NULL, ECS_INTERNAL_ERROR, NULL);
+                    ctx->it->trs[field_map ? field_map[f] : f] = tr;
+                    node->_tables[f] = r->table;
+                }
+            }
+        }
+    }
+}
+
+/* Initialize cached query iterator. */
+void flecs_query_cache_iter_init(
+    ecs_iter_t *it,
+    ecs_query_iter_t *qit,
+    ecs_query_impl_t *impl)
+{
+    ecs_query_cache_t *cache = impl->cache;
+    if (!cache) {
+        return;
+    }
+
+    qit->group = cache->first_group;
+    qit->tables = &qit->group->tables;
+    qit->all_tables = qit->tables;
+    qit->cur = 0;
+
+    /* If query uses order_by, iterate the array with ordered table slices. */
+    if (cache->order_by_callback) {
+        /* Check if query needs sorting. */
+        flecs_query_cache_sort_tables(it->real_world, impl);
+        qit->tables = &cache->table_slices;
+        qit->all_tables = qit->tables;
+        qit->group = NULL;
+    }
+
+    cache->prev_match_count = cache->match_count;
+}
+
+/* Find next match in cache. This function is called for non-trivial caches and
+ * handles features like wildcards, up traversal and grouping. */
+static
+ecs_query_cache_match_t* flecs_query_cache_next(
+    const ecs_query_run_ctx_t *ctx,
+    bool always_match_empty)
+{
+    ecs_iter_t *it = ctx->it;
+    ecs_query_iter_t *qit = &it->priv_.iter.query;
+
+    repeat: {
+        if (qit->cur >= ecs_vec_count(qit->tables)) {
+            /* We're iterating the table vector of the group */
+            if (qit->tables == qit->all_tables) {   
+                /* If a group is set, we might have to iterate multiple */
+                ecs_query_cache_group_t *group = qit->group;
+                if (!group || qit->iter_single_group) {
+                    return NULL;
+                }
+
+                /* Check if this was the last group to iterate */
+                qit->group = group->next;
+                if (!qit->group) {
+                    return NULL;
+                }
+
+                /* Prepare iterator for the next group */
+                qit->all_tables = qit->tables = &qit->group->tables;
+                qit->cur = 0;
+
+                /* Not common, but can happen if a query uses group_by and there
+                 * are no tables in the default group (group id 0). */
+                if (!ecs_vec_count(qit->tables)) {
+                    goto repeat;
+                }
+
+            /* We're iterating a wildcard table vector */
+            } else {
+                qit->tables = qit->all_tables;
+                qit->cur = qit->all_cur;
+                goto repeat;
+            }
+        }
+
+        /* Get currently iterated cache element */
+        ecs_query_cache_match_t *qm = 
+            ecs_vec_get_t(qit->tables, ecs_query_cache_match_t, qit->cur);
+
+        /* Check if table is empty and whether we need to skip it */
+        ecs_table_t *table = qm->base.table;
+        if (!ecs_table_count(table)) {
+            if (!(always_match_empty || (it->flags & EcsIterMatchEmptyTables))) {
+                if (ctx->query->pub.flags & EcsQueryHasChangeDetection) {
+                    flecs_query_sync_match_monitor(
+                        flecs_query_impl(it->query), qm);
+                }
+                qit->cur ++;
+                goto repeat;
+            }
+        }
+
+        qit->elem = qm;
+    
+        /* If there are multiple matches for table iterate those first. */
+        if (qm->wildcard_matches) {
+            qit->tables = qm->wildcard_matches;
+            qit->all_cur = qit->cur + 1;
+            qit->cur = 0;
+        } else {
+            qit->cur ++;
+        }
+
+        ctx->vars[0].range.table = table;
+
+        return qm;
+    }
+}
+
+/* Update cached pointers. Cached queries store the column pointers of a matched
+ * table which improves cache locality of fetching component pointers while
+ * iterating a cache as it avoids having to go through a table record.
+ * Component pointers only need to be updated when a table column got 
+ * reallocated, in which case the table_column_version will have increased. */
+static
+void flecs_query_cache_update_ptrs(
+    ecs_iter_t *it,
+    ecs_query_triv_cache_match_t *qm,
+    ecs_table_t *table)
+{
+    ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    it->ptrs = qm->ptrs;
+
+    uint32_t version = flecs_get_table_column_version(
+        it->real_world, table->id);
+    if (qm->table_version == version) {
+        /* This is the most common case, as table columns pointers only change
+         * when the table grows in size. */
+        return;
+    }
+
+    qm->table_version = version;
+
+    /* Update the pointers. This can be done safely from multiple threads since
+     * all the read data is immutable, and thus each thread will arrive at the
+     * same result. */
+    int32_t i, field_count = it->field_count;
+    for (i = 0; i < field_count; i ++) {
+        qm->ptrs[i] = NULL;
+
+        const ecs_table_record_t *tr = qm->trs[i];
+        if (!tr || tr->column == -1) {
+            /* Field is not set or is not a component. */
+            continue;
+        }
+
+        if (it->sources[i]) {
+            /* Field is not matched on table */
+            continue;
+        }
+
+        qm->ptrs[i] = table->data.columns[tr->column].data;
+    }
+}
+
+/* Find next match in trivial cache. A trivial cache doesn't have to handle
+ * wildcards, multiple groups or fields matched through up traversal. */
+static
+ecs_query_cache_match_t* flecs_query_trivial_cache_next(
+    const ecs_query_run_ctx_t *ctx)
+{
+    ecs_iter_t *it = ctx->it;
+    ecs_query_iter_t *qit = &it->priv_.iter.query;
+
+    repeat: {
+        if (qit->cur == ecs_vec_count(qit->tables)) {
+            return NULL;
+        }
+
+        ecs_query_triv_cache_match_t *qm = ecs_vec_get_t(
+            qit->tables, ecs_query_triv_cache_match_t, qit->cur);
+        ecs_table_t *table = it->table = qm->table;
+        int32_t count = it->count = ecs_table_count(table);
+
+        qit->cur ++;
+
+        if (!count) {
+            if (!(it->flags & EcsIterMatchEmptyTables)) {
+                goto repeat;
+            }
+        }
+
+        flecs_query_cache_update_ptrs(it, qm, table);
+
+        it->entities = ecs_table_entities(table);
+        it->trs = qm->trs;
+        it->set_fields = qm->set_fields;
+
+        return qit->elem = (ecs_query_cache_match_t*)qm;
+    }
+}
+
+static
+ecs_query_cache_match_t* flecs_query_test(
+    const ecs_query_run_ctx_t *ctx,
+    bool redo)
+{
+    ecs_iter_t *it = ctx->it;
+    if (!redo) {
+        ecs_var_t *var = &ctx->vars[0];
+        ecs_table_t *table = var->range.table;
+        ecs_assert(table != NULL, ECS_INVALID_OPERATION, 
+            "the variable set on the iterator is missing a table");
+
+        ecs_query_cache_table_t *qt = flecs_query_cache_get_table(
+            ctx->query->cache, table);
+        if (!qt) {
+            return NULL;
+        }
+
+        ecs_query_iter_t *qit = &it->priv_.iter.query;
+        ecs_assert(qt->group != NULL, ECS_INTERNAL_ERROR, NULL);
+        qit->group = qt->group;
+        qit->tables = &qt->group->tables;
+        qit->cur = qt->index;
+    }
+
+    ecs_query_cache_match_t *qm = flecs_query_cache_next(ctx, true /* always match empty */);
+    if (redo && qm) {
+        if (qm->base.table != it->table) {
+            return NULL;
+        }
+    }
+
+    return qm;
+}
+
+static
+void flecs_query_cache_init_mapped_fields(
+    const ecs_query_run_ctx_t *ctx,
+    ecs_query_cache_match_t *node)
+{
+    ecs_iter_t *it = ctx->it;
+    const ecs_query_impl_t *impl = ctx->query;
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(!flecs_query_cache_is_trivial(cache), ECS_INTERNAL_ERROR, NULL);
+
+    int32_t i, field_count = cache->query->field_count;
+    int8_t *field_map = cache->field_map;
+
+    for (i = 0; i < field_count; i ++) {
+        int8_t field_index = field_map[i];
+        it->trs[field_index] = node->base.trs[i];
+
+        it->ids[field_index] = node->_ids[i];
+        it->sources[field_index] = node->_sources[i];
+
+        ecs_termset_t bit = (ecs_termset_t)(1u << i);
+        ecs_termset_t field_bit = (ecs_termset_t)(1u << field_index);
+
+        ECS_TERMSET_COND(it->set_fields, field_bit, node->base.set_fields & bit);
+        ECS_TERMSET_COND(it->up_fields, field_bit, node->_up_fields & bit);
+    }
+}
+
+/* Iterate cache for query that's partially cached */
+bool flecs_query_cache_search(
+    const ecs_query_run_ctx_t *ctx)
+{
+    ecs_assert(!flecs_query_cache_is_trivial(ctx->query->cache), 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_match_t *node = flecs_query_cache_next(ctx, false);
+    if (!node) {
+        return false;
+    }
+
+    flecs_query_cache_init_mapped_fields(ctx, node);
+    ctx->vars[0].range.count = node->_count;
+    ctx->vars[0].range.offset = node->_offset;
+
+    flecs_query_update_node_up_trs(ctx, node);
+
+    return true;
+}
+
+/* Iterate cache for query that's entirely cached */
+bool flecs_query_is_cache_search(
+    const ecs_query_run_ctx_t *ctx)
+{
+    ecs_assert(!flecs_query_cache_is_trivial(ctx->query->cache), 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_match_t *node = flecs_query_cache_next(ctx, false);
+    if (!node) {
+        return false;
+    }
+
+    ecs_iter_t *it = ctx->it;
+    it->trs = node->base.trs;
+    it->ids = node->_ids;
+    it->sources = node->_sources;
+    it->set_fields = node->base.set_fields;
+    it->up_fields = node->_up_fields;
+
+    flecs_query_update_node_up_trs(ctx, node);
+
+    flecs_query_cache_update_ptrs(it, &node->base, node->base.table);
+
+    return true;
+}
+
+/* Iterate cache for query that's entirely cached */
+bool flecs_query_is_trivial_cache_search(
+    const ecs_query_run_ctx_t *ctx)
+{
+    return flecs_query_trivial_cache_next(ctx) != NULL;
+}
+
+/* Test if query that is entirely cached matches constrained $this */
+bool flecs_query_cache_test(
+    const ecs_query_run_ctx_t *ctx,
+    bool redo)
+{
+    ecs_query_cache_match_t *node = flecs_query_test(ctx, redo);
+    if (!node) {
+        return false;
+    }
+
+    flecs_query_cache_init_mapped_fields(ctx, node);
+    flecs_query_update_node_up_trs(ctx, node);
+
+    return true;
+}
+
+/* Test if query that is entirely cached matches constrained $this */
+bool flecs_query_is_cache_test(
+    const ecs_query_run_ctx_t *ctx,
+    bool redo)
+{
+    ecs_assert(!flecs_query_cache_is_trivial(ctx->query->cache), 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_match_t *node = flecs_query_test(ctx, redo);
+    if (!node) {
+        return false;
+    }
+
+    ecs_iter_t *it = ctx->it;
+    it->trs = node->base.trs;
+    it->ids = node->_ids;
+    it->sources = node->_sources;
+    it->set_fields = node->base.set_fields;
+
+    flecs_query_update_node_up_trs(ctx, node);
+
+    return true;
+}
+
+bool flecs_query_is_trivial_cache_test(
+    const ecs_query_run_ctx_t *ctx,
+    bool redo)
+{
+    ecs_assert(flecs_query_cache_is_trivial(ctx->query->cache), 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_iter_t *it = ctx->it;
+    if (!redo) {
+        ecs_var_t *var = &ctx->vars[0];
+        ecs_table_t *table = var->range.table;
+        ecs_assert(table != NULL, ECS_INVALID_OPERATION, 
+            "the variable set on the iterator is missing a table");
+
+        ecs_query_cache_t *cache = ctx->query->cache;
+        ecs_query_cache_table_t *qt = flecs_query_cache_get_table(cache, table);
+        if (!qt) {
+            return false;
+        }
+
+        ecs_query_cache_match_t *qm = 
+            flecs_query_cache_match_from_table(cache, qt);
+        it->trs = qm->base.trs;
+        it->set_fields = qm->base.set_fields;
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * @file query/cache/match.c
+ * @brief Match table one or more times with query.
+ */
+
+
+/* Free cache entry element. */
+static
+void flecs_query_cache_match_elem_fini(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_match_t *qm)
+{
+    flecs_bfree(&cache->allocators.pointers, 
+        ECS_CONST_CAST(void*, qm->base.trs));
+
+    flecs_bfree(&cache->allocators.pointers, 
+        ECS_CONST_CAST(void*, qm->base.ptrs));
+
+    if (!flecs_query_cache_is_trivial(cache)) {
+        if (qm->_ids != cache->query->ids) {
+            flecs_bfree(&cache->allocators.ids, qm->_ids);
+        }
+
+        if (qm->_sources != cache->sources) {
+            flecs_bfree(&cache->allocators.ids, qm->_sources);
+        }
+
+        if (qm->_tables) {
+            flecs_bfree(&cache->allocators.pointers, qm->_tables);
+        }
+
+        if (qm->_monitor) {
+            flecs_bfree(&cache->allocators.monitors, qm->_monitor);
+        }
+    }
+}
+
+/* Free cache entry element and optional wildcard matches. */
+void flecs_query_cache_match_fini(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_match_t *qm)
+{
+    flecs_query_cache_match_elem_fini(cache, qm);
+
+    if (!flecs_query_cache_is_trivial(cache)) {
+        if (qm->wildcard_matches) {
+            ecs_query_cache_match_t *elems = ecs_vec_first(qm->wildcard_matches);
+            int32_t i, count = ecs_vec_count(qm->wildcard_matches);
+            for (i = 0; i < count; i ++) {
+                flecs_query_cache_match_elem_fini(cache, &elems[i]);
+            }
+
+            ecs_allocator_t *a = &cache->query->real_world->allocator;
+            ecs_vec_fini_t(a, qm->wildcard_matches, ecs_query_cache_match_t);
+            flecs_free_t(a, ecs_vec_t, qm->wildcard_matches);
+        }
+    }
+}
+
+/* Initialize cache entry element. */
+static
+void flecs_query_cache_match_set(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_match_t *qm,
+    ecs_iter_t *it)
+{
+    bool trivial_cache = flecs_query_cache_is_trivial(cache);
+    ecs_query_t *query = cache->query;
+    int8_t i, field_count = query->field_count;
+    ecs_assert(field_count > 0, ECS_INTERNAL_ERROR, NULL);
+
+    qm->base.table = it->table;
+    qm->base.set_fields = it->set_fields;
+
+    if (!qm->base.ptrs) {
+        qm->base.ptrs = flecs_balloc(&cache->allocators.pointers);
+    }
+
+    if (!qm->base.trs) {
+        qm->base.trs = flecs_balloc(&cache->allocators.pointers);
+    }
+
+    /* Reset resources in case this is an existing record */
+    ecs_os_memcpy_n(ECS_CONST_CAST(ecs_table_record_t**, qm->base.trs), 
+        it->trs, ecs_table_record_t*, field_count);
+    
+    /* Initialize pointers*/
+    ecs_os_memset_n(qm->base.ptrs, 0, void*, field_count);
+
+    /* Set table version to sentinel that'll force reevaluation */
+    qm->base.table_version = UINT32_MAX;
+
+    /* Find out whether to store result-specific ids array or fixed array */
+    ecs_id_t *ids = cache->query->ids;
+    for (i = 0; i < field_count; i ++) {
+        if (it->ids[i] != ids[i]) {
+            break;
+        }
+    }
+
+    if (!trivial_cache) {
+        if (i != field_count) {
+            if (qm->_ids == ids || !qm->_ids) {
+                qm->_ids = flecs_balloc(&cache->allocators.ids);
+            }
+            ecs_os_memcpy_n(qm->_ids, it->ids, ecs_id_t, field_count);
+        } else {
+            if (qm->_ids != ids) {
+                flecs_bfree(&cache->allocators.ids, qm->_ids);
+                qm->_ids = ids;
+            }
+        }
+    }
+
+    /* Find out whether to store result-specific sources array or fixed array */
+    for (i = 0; i < field_count; i ++) {
+        if (it->sources[i]) {
+            break;
+        }
+    }
+
+    if (!trivial_cache) {
+        if (i != field_count) {
+            if (qm->_sources == cache->sources || !qm->_sources) {
+                qm->_sources = flecs_balloc(&cache->allocators.ids);
+            }
+            ecs_os_memcpy_n(qm->_sources, it->sources, ecs_entity_t, field_count);
+            if (!qm->_tables) {
+                qm->_tables = flecs_balloc(&cache->allocators.pointers);
+            }
+            for (i = 0; i < field_count; i ++) {
+                if (it->trs[i]) {
+                    qm->_tables[i] = it->trs[i]->hdr.table;
+                }
+            }
+        } else {
+            if (qm->_sources != cache->sources) {
+                flecs_bfree(&cache->allocators.ids, qm->_sources);
+                qm->_sources = cache->sources;
+            }
+            if (qm->_tables) {
+                flecs_bfree(&cache->allocators.pointers, qm->_tables);
+                qm->_tables = NULL;
+            }
+        }
+
+        qm->_up_fields = it->up_fields;
+    } else {
+        /* If this is a trivial cache, we shouldn't have any fields with 
+        * non-$this sources */
+        ecs_assert(i == field_count, ECS_INTERNAL_ERROR, NULL);
+    }
+}
+
+/* Iterate the next match for table. This function accepts an iterator for the 
+ * cache query and will keep on iterating until a result for a different table
+ * is returned. Typically each table only returns one result, but wildcard 
+ * queries can return multiple results for the same table. 
+ * 
+ * For each iterated result the function will initialize the cache entry for the
+ * matched table. */
+bool flecs_query_cache_match_next(
+    ecs_query_cache_t *cache,
+    ecs_iter_t *it)
+{
+    ecs_table_t *table = it->table;
+    ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_match_t *first = flecs_query_cache_add_table(cache, table);
+    ecs_query_cache_match_t *qm = first;
+
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+
+    do {
+        flecs_query_cache_match_set(cache, qm, it);
+
+        if (!ecs_query_next(it)) {
+            return false;
+        }
+
+        if (it->table != table) {
+            return true;
+        }
+
+        /* Another match for the same table (for wildcard queries) */
+
+        if (!first->wildcard_matches) {
+            first->wildcard_matches = flecs_alloc_t(a, ecs_vec_t);
+            ecs_vec_init(a, first->wildcard_matches, elem_size, 1);
+        }
+
+        qm = ecs_vec_append(a, first->wildcard_matches, elem_size);
+        ecs_os_zeromem(qm);
+    } while (true);
+}
+
+/* Same as flecs_query_cache_match_next, but for rematching. This function will
+ * overwrite existing cache entries with new match data. */
+static
+bool flecs_query_cache_rematch_next(
+    ecs_query_cache_t *cache,
+    ecs_iter_t *it)
+{
+    ecs_table_t *table = it->table;
+    ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_cache_match_t *first = 
+        flecs_query_cache_ensure_table(cache, table);
+    ecs_query_cache_match_t *qm = first;
+    
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    ecs_allocator_t *a = &cache->query->real_world->allocator;
+    ecs_vec_t *wildcard_matches = first->wildcard_matches;
+    int32_t wildcard_elem = 0;
+
+    bool result = true, has_more = true;
+
+    /* So we can tell which tables in the cache got rematched. All tables for 
+     * which this counter hasn't changed are no longer matched by the query. */
+    first->rematch_count = cache->rematch_count;
+
+    do {
+        flecs_query_cache_match_set(cache, qm, it);
+
+        if (!ecs_query_next(it)) {
+            has_more = false;
+            result = false;
+        }
+
+        if (it->table != table) {
+            has_more = false;
+        }
+
+        /* Are there more results for this table? */
+        if (!has_more) {
+            /* If existing match had more wildcard matches than new match free
+             * the superfluous ones. */
+
+            if (wildcard_matches) {
+                int32_t i, count = ecs_vec_count(wildcard_matches);
+                for (i = wildcard_elem; i < count; i ++) {
+                    ecs_query_cache_match_t *qm_elem = ecs_vec_get(
+                        wildcard_matches, elem_size, i);
+                    flecs_query_cache_match_fini(cache, qm_elem);
+                }
+
+                if (!wildcard_elem) {
+                    ecs_vec_fini(a, wildcard_matches, elem_size);
+                    flecs_free_t(a, ecs_vec_t, wildcard_matches);
+                    qm->wildcard_matches = NULL;
+                }
+            }
+
+            /* Are there more results for other tables? */
+            return result;
+        }
+
+        /* Another match for the same table (for wildcard queries) */
+
+        if (!wildcard_matches) {
+            first->wildcard_matches = wildcard_matches = 
+                flecs_alloc_t(a, ecs_vec_t);
+            ecs_vec_init(a, wildcard_matches, elem_size, 1);
+        }
+
+        if (ecs_vec_count(wildcard_matches) <= wildcard_elem) {
+            qm = ecs_vec_append(a, wildcard_matches, elem_size);
+            ecs_os_zeromem(qm);
+        } else {
+            qm = ecs_vec_get(wildcard_matches, elem_size, wildcard_elem);
+        }
+
+        wildcard_elem ++;
+    } while (true);
+}
+
+/* Rematch query cache. This function is called whenever something happened that
+ * could have caused a previously matching table to no longer match with the 
+ * query. This function is not called for regular table creation or deletion.
+ * 
+ * An example of when this function is called is when a query matched a 
+ * component on a parent, and that component was removed from the parent. This
+ * means that tables with (ChildOf, parent) previously matched the query, but
+ * after the component got removed, no longer match.
+ * 
+ * This operation is expensive, since it needs to:
+ * - make sure that optional fields matched on parents are updated
+ * - groups are up to date for all the matched tables
+ * - tables that no longer match are removed from the cache.
+ */
+void flecs_query_rematch(
+    ecs_world_t *world,
+    ecs_query_t *q)
+{
+    flecs_poly_assert(world, ecs_world_t);
+    ecs_allocator_t *a = &world->allocator;
+
+    ecs_iter_t it;
+    ecs_query_impl_t *impl = flecs_query_impl(q);
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    /* Queries with trivial caches can't trigger rematching */
+    ecs_assert(!flecs_query_cache_is_trivial(cache), ECS_INTERNAL_ERROR, NULL);
+
+    if (cache->monitor_generation == world->monitor_generation) {
+        return;
+    }
+
+    ecs_os_perf_trace_push("flecs.query.rematch");
+
+    cache->monitor_generation = world->monitor_generation;
+    cache->match_count ++;
+
+    world->info.rematch_count_total ++;
+    int32_t rematch_count = ++ cache->rematch_count;
+
+    ecs_time_t t = {0};
+    if (world->flags & EcsWorldMeasureFrameTime) {
+        ecs_time_measure(&t);
+    }
+
+    it = ecs_query_iter(world, cache->query);
+    ECS_BIT_SET(it.flags, EcsIterNoData);
+
+    if (!ecs_query_next(&it)) {
+        flecs_query_cache_remove_all_tables(cache);
+        goto done;
+    }
+
+    while (flecs_query_cache_rematch_next(cache, &it)) { }
+
+    /* Iterate all tables in cache, remove ones that weren't just matched */
+    ecs_vec_t unmatched; ecs_vec_init_t(a, &unmatched, ecs_table_t*, 0);
+    ecs_size_t elem_size = flecs_query_cache_elem_size(cache);
+    ecs_query_cache_group_t *cur = &cache->default_group;
+    do {
+        int32_t i, count = ecs_vec_count(&cur->tables);
+        for (i = 0; i < count; i ++) {
+            ecs_query_cache_match_t *qm = 
+                ecs_vec_get(&cur->tables, elem_size, i);
+            if (qm->rematch_count != rematch_count) {
+                /* Collect tables, don't modify map while updating it */
+                ecs_vec_append_t(a, &unmatched, ecs_table_t*)[0] = 
+                    qm->base.table;
+            }
+        }
+    } while ((cur = cur->next));
+
+    /* Actually unmatch tables */
+    int32_t i, count = ecs_vec_count(&unmatched);
+    ecs_table_t **unmatched_tables = ecs_vec_first(&unmatched);
+    for (i = 0; i < count; i ++) {
+        flecs_query_cache_remove_table(cache, unmatched_tables[i]);
+        ecs_assert(flecs_query_cache_get_table(
+            cache, unmatched_tables[i]) == NULL, ECS_INTERNAL_ERROR, NULL);
+    }
+    ecs_vec_fini_t(a, &unmatched, ecs_table_t*);
+
+    if (world->flags & EcsWorldMeasureFrameTime) {
+        world->info.rematch_time_total += (ecs_ftime_t)ecs_time_measure(&t);
+    }
+
+done:
+    ecs_os_perf_trace_pop("flecs.query.rematch");
+}
+
+/**
+ * @file query/cache/cache_order_by.c
+ * @brief Query sorting (order_by) implenentation.
+ */
+
+
+ECS_SORT_TABLE_WITH_COMPARE(_, flecs_query_cache_sort_table_generic, order_by, static)
+
+static
+void flecs_query_cache_sort_table(
+    ecs_world_t *world,
+    ecs_table_t *table,
+    int32_t column_index,
+    ecs_order_by_action_t compare,
+    ecs_sort_table_action_t sort)
+{
+    int32_t count = ecs_table_count(table);
+    if (!count) {
+        /* Nothing to sort */
+        return;
+    }
+    
+    if (count < 2) {
+        return;
+    }
+
+    ecs_entity_t *entities = table->data.entities;
+    void *ptr = NULL;
+    int32_t size = 0;
+    if (column_index != -1) {
+        ecs_column_t *column = &table->data.columns[column_index];
+        ecs_type_info_t *ti = column->ti;
+        size = ti->size;
+        ptr = column->data;
+    }
+
+    if (sort) {
+        sort(world, table, entities, ptr, size, 0, count - 1, compare);
+    } else {
+        flecs_query_cache_sort_table_generic(
+            world, table, entities, ptr, size, 0, count - 1, compare);
+    }
+}
+
+/* Helper struct for building sorted table ranges */
+typedef struct sort_helper_t {
+    ecs_query_cache_match_t *match;
+    ecs_entity_t *entities;
+    const void *ptr;
+    int32_t row;
+    int32_t elem_size;
+    int32_t count;
+    bool shared;
+} sort_helper_t;
+
+static
+const void* ptr_from_helper(
+    sort_helper_t *helper)
+{
+    ecs_assert(helper->row < helper->count, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(helper->elem_size >= 0, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(helper->row >= 0, ECS_INTERNAL_ERROR, NULL);
+    if (helper->shared) {
+        return helper->ptr;
+    } else {
+        return ECS_ELEM(helper->ptr, helper->elem_size, helper->row);
+    }
+}
+
+static
+ecs_entity_t e_from_helper(
+    sort_helper_t *helper)
+{
+    if (helper->row < helper->count) {
+        return helper->entities[helper->row];
+    } else {
+        return 0;
+    }
+}
+
+static
+void flecs_query_cache_build_sorted_table_range(
+    ecs_query_cache_t *cache,
+    ecs_query_cache_group_t *group)
+{
+    ecs_world_t *world = cache->query->world;
+    flecs_poly_assert(world, ecs_world_t);
+    ecs_assert(!(world->flags & EcsWorldMultiThreaded), ECS_UNSUPPORTED,
+        "cannot sort query in multithreaded mode");
+
+    ecs_entity_t id = cache->order_by;
+    ecs_order_by_action_t compare = cache->order_by_callback;
+    int32_t i, table_count = ecs_vec_count(&group->tables);
+    if (!table_count) {
+        return;
+    }
+
+    ecs_vec_init_if_t(&cache->table_slices, ecs_query_cache_match_t);
+    int32_t to_sort = 0;
+    int32_t order_by_term = cache->order_by_term;
+
+    sort_helper_t *helper = flecs_alloc_n(
+        &world->allocator, sort_helper_t, table_count);
+    for (i = 0; i < table_count; i ++) {
+        ecs_query_cache_match_t *qm = 
+            ecs_vec_get_t(&group->tables, ecs_query_cache_match_t, i);
+        ecs_table_t *table = qm->base.table;
+
+        if (ecs_table_count(table) == 0) {
+            continue;
+        }
+
+        if (id) {
+            const ecs_term_t *term = &cache->query->terms[order_by_term];
+            int32_t field = term->field_index;
+            ecs_size_t size = cache->query->sizes[field];
+            ecs_entity_t src = qm->_sources[field];
+            if (src == 0) {
+                int32_t column_index = qm->base.trs[field]->column;
+                ecs_column_t *column = &table->data.columns[column_index];
+                helper[to_sort].ptr = column->data;
+                helper[to_sort].elem_size = size;
+                helper[to_sort].shared = false;
+            } else {
+                ecs_record_t *r = flecs_entities_get(world, src);
+                ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
+                ecs_assert(r->table != NULL, ECS_INTERNAL_ERROR, NULL);
+
+                if (term->src.id & EcsUp) {
+                    ecs_entity_t base = 0;
+                    ecs_search_relation(world, r->table, 0, id, 
+                        EcsIsA, term->src.id & EcsTraverseFlags, &base, 0, 0);
+                    if (base && base != src) { /* Component could be inherited */
+                        r = flecs_entities_get(world, base);
+                    }
+                }
+
+                helper[to_sort].ptr = ecs_table_get_id(
+                    world, r->table, id, ECS_RECORD_TO_ROW(r->row));
+                helper[to_sort].elem_size = size;
+                helper[to_sort].shared = true;
+            }
+            ecs_assert(helper[to_sort].ptr != NULL, ECS_INTERNAL_ERROR, NULL);
+            ecs_assert(helper[to_sort].elem_size != 0, ECS_INTERNAL_ERROR, NULL);
+        } else {
+            helper[to_sort].ptr = NULL;
+            helper[to_sort].elem_size = 0;
+            helper[to_sort].shared = false;
+        }
+
+        helper[to_sort].match = qm;
+        helper[to_sort].entities = table->data.entities;
+        helper[to_sort].row = 0;
+        helper[to_sort].count = ecs_table_count(table);
+        to_sort ++;      
+    }
+
+    if (!to_sort) {
+        goto done;
+    }
+
+    ecs_query_cache_match_t *cur = NULL;
+
+    bool proceed;
+    do {
+        int32_t j, min = 0;
+        proceed = true;
+
+        ecs_entity_t e1;
+        while (!(e1 = e_from_helper(&helper[min]))) {
+            min ++;
+            if (min == to_sort) {
+                proceed = false;
+                break;
+            }
+        }
+
+        if (!proceed) {
+            break;
+        }
+
+        for (j = min + 1; j < to_sort; j++) {
+            ecs_entity_t e2 = e_from_helper(&helper[j]);
+            if (!e2) {
+                continue;
+            }
+
+            const void *ptr1 = ptr_from_helper(&helper[min]);
+            const void *ptr2 = ptr_from_helper(&helper[j]);
+
+            if (compare(e1, ptr1, e2, ptr2) > 0) {
+                min = j;
+                e1 = e_from_helper(&helper[min]);
+            }
+        }
+
+        sort_helper_t *cur_helper = &helper[min];
+        if (!cur || cur->base.trs != cur_helper->match->base.trs) {
+            cur = ecs_vec_append_t(NULL, &cache->table_slices, 
+                ecs_query_cache_match_t);
+            *cur = *(cur_helper->match);
+            cur->_offset = cur_helper->row;
+            cur->_count = 1;
+        } else {
+            cur->_count ++;
+        }
+
+        cur_helper->row ++;
+    } while (proceed);
+
+done:
+    flecs_free_n(&world->allocator, sort_helper_t, table_count, helper);
+}
+
+void flecs_query_cache_build_sorted_tables(
+    ecs_query_cache_t *cache)
+{
+    ecs_vec_clear(&cache->table_slices);
+
+    /* Sort tables in group order */
+    ecs_query_cache_group_t *cur = &cache->default_group;
+    do {
+        flecs_query_cache_build_sorted_table_range(cache, cur);
+    } while ((cur = cur->next));
+}
+
+void flecs_query_cache_sort_tables(
+    ecs_world_t *world,
+    ecs_query_impl_t *impl)
+{
+    ecs_query_cache_t *cache = impl->cache;
+    ecs_order_by_action_t compare = cache->order_by_callback;
+    if (!compare) {
+        return;
+    }
+
+    ecs_sort_table_action_t sort = cache->order_by_table_callback;
+    ecs_entity_t order_by = cache->order_by;
+    int32_t order_by_term = cache->order_by_term;
+    ecs_component_record_t *cr = flecs_components_get(world, order_by);
+
+    /* Iterate over non-empty tables. Don't bother with empty tables as they
+     * have nothing to sort */
+
+    bool tables_sorted = false;
+
+    ecs_query_cache_group_t *cur = &cache->default_group;
+    do {
+        int32_t i, count = ecs_vec_count(&cur->tables);
+        for (i = 0; i < count; i ++) {
+            ecs_query_cache_match_t *qm = 
+                ecs_vec_get_t(&cur->tables, ecs_query_cache_match_t, i);
+            ecs_table_t *table = qm->base.table;
+            bool dirty = false;
+
+            if (flecs_query_check_table_monitor(impl, qm, 0)) {
+                tables_sorted = true;
+                dirty = true;
+
+                if (!ecs_table_count(table)) {
+                    /* If table is empty, there's a chance the query won't 
+                     * iterate it so update the match monitor here. */
+                    flecs_query_sync_match_monitor(impl, qm);
+
+                    ecs_vec_t *matches = qm->wildcard_matches;
+                    if (matches) {
+                        int32_t j, qms_count = ecs_vec_count(matches);
+                        ecs_query_cache_match_t *qms = ecs_vec_first(matches);
+                        for (j = 0; j < qms_count; j ++) {
+                            flecs_query_sync_match_monitor(impl, &qms[j]);
+                        }
+                    }
+                }
+            }
+
+            int32_t column = -1;
+            if (order_by) {
+                if (flecs_query_check_table_monitor(
+                    impl, qm, order_by_term + 1)) 
+                {
+                    dirty = true;
+                }
+
+                if (dirty) {
+                    column = -1;
+
+                    const ecs_table_record_t *tr = flecs_component_get_table(
+                        cr, table);
+                    if (tr) {
+                        column = tr->column;
+                    }
+
+                    if (column == -1) {
+                        /* Component is shared, no sorting is needed */
+                        dirty = false;
+                    }
+                }
+            }
+
+            if (!dirty) {
+                continue;
+            }
+
+            /* Something has changed, sort the table. Prefers using 
+            * flecs_query_cache_sort_table when available */
+            flecs_query_cache_sort_table(world, table, column, compare, sort);
+            tables_sorted = true;
+        }
+    } while ((cur = cur->next)); /* Next group */
+
+    if (tables_sorted || cache->match_count != cache->prev_match_count) {
+        flecs_query_cache_build_sorted_tables(cache);
+        cache->match_count ++; /* Increase version if tables changed */
+    }
+}
 
 /**
  * @file query/compiler/compile.c
@@ -69898,13 +73501,14 @@ int flecs_query_compile(
      * trivial queries use trivial iterators that don't use query ops. */
     bool needs_plan = true;
     ecs_flags32_t flags = query->pub.flags;
-    ecs_flags32_t trivial_flags = EcsQueryIsTrivial|EcsQueryMatchOnlySelf;
-    if ((flags & trivial_flags) == trivial_flags) {
-        if (query->cache) {
-            if (flags & EcsQueryIsCacheable) {
-                needs_plan = false;                
-            }
-        } else {
+    
+    if (query->cache) {
+        if (flags & EcsQueryIsCacheable) {
+            needs_plan = false;
+        }
+    } else {
+        ecs_flags32_t trivial_flags = EcsQueryIsTrivial|EcsQueryMatchOnlySelf;
+        if ((flags & trivial_flags) == trivial_flags) {
             if (!(flags & EcsQueryMatchWildcards)) {
                 needs_plan = false;
             }
@@ -71683,2520 +75287,6 @@ error:
 }
 
 /**
- * @file query/engine/cache.c
- * @brief Cached query implementation.
- */
-
-
-int32_t flecs_query_cache_table_count(
-    ecs_query_cache_t *cache)
-{
-    return cache->cache.tables.count;
-}
-
-int32_t flecs_query_cache_entity_count(
-    const ecs_query_cache_t *cache)
-{    
-    int32_t result = 0;
-    ecs_table_cache_hdr_t *cur, *last = cache->cache.tables.last;
-    if (!last) {
-        return 0;
-    }
-
-    for (cur = cache->cache.tables.first; cur != NULL; cur = cur->next) {
-        result += ecs_table_count(cur->table);
-    }
-
-    return result;
-}
-
-static
-uint64_t flecs_query_cache_get_group_id(
-    ecs_query_cache_t *cache,
-    ecs_table_t *table)
-{
-    if (cache->group_by_callback) {
-        return cache->group_by_callback(cache->query->world, table, 
-            cache->group_by, cache->group_by_ctx);
-    } else {
-        return 0;
-    }
-}
-
-static
-void flecs_query_cache_compute_group_id(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *match)
-{
-    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    if (cache->group_by_callback) {
-        ecs_table_t *table = match->table;
-        ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
-
-        match->group_id = flecs_query_cache_get_group_id(cache, table);
-    } else {
-        match->group_id = 0;
-    }
-}
-
-static
-ecs_query_cache_table_list_t* flecs_query_cache_get_group(
-    const ecs_query_cache_t *cache,
-    uint64_t group_id)
-{
-    return ecs_map_get_deref(
-        &cache->groups, ecs_query_cache_table_list_t, group_id);
-}
-
-static
-ecs_query_cache_table_list_t* flecs_query_cache_ensure_group(
-    ecs_query_cache_t *cache,
-    uint64_t id)
-{
-    ecs_query_cache_table_list_t *group = ecs_map_get_deref(&cache->groups, 
-        ecs_query_cache_table_list_t, id);
-
-    if (!group) {
-        group = ecs_map_insert_alloc_t(&cache->groups, 
-            ecs_query_cache_table_list_t, id);
-        ecs_os_zeromem(group);
-        if (cache->on_group_create) {
-            group->info.ctx = cache->on_group_create(
-                cache->query->world, id, cache->group_by_ctx);
-        }
-    }
-
-    return group;
-}
-
-static
-void flecs_query_cache_remove_group(
-    ecs_query_cache_t *cache,
-    uint64_t id)
-{
-    if (cache->on_group_delete) {
-        ecs_query_cache_table_list_t *group = ecs_map_get_deref(&cache->groups, 
-            ecs_query_cache_table_list_t, id);
-        if (group) {
-            cache->on_group_delete(cache->query->world, id, 
-                group->info.ctx, cache->group_by_ctx);
-        }
-    }
-
-    ecs_map_remove_free(&cache->groups, id);
-}
-
-static
-uint64_t flecs_query_cache_default_group_by(
-    ecs_world_t *world, 
-    ecs_table_t *table, 
-    ecs_id_t id, 
-    void *ctx) 
-{
-    (void)ctx;
-
-    ecs_id_t match;
-    if (ecs_search(world, table, ecs_pair(id, EcsWildcard), &match) != -1) {
-        return ecs_pair_second(world, match);
-    }
-    return 0;
-}
-
-/* Find the last node of the group after which this group should be inserted */
-static
-ecs_query_cache_table_match_t* flecs_query_cache_find_group_insertion_node(
-    ecs_query_cache_t *cache,
-    uint64_t group_id)
-{
-    /* Grouping must be enabled */
-    ecs_assert(cache->group_by_callback != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    ecs_map_iter_t it = ecs_map_iter(&cache->groups);
-    ecs_query_cache_table_list_t *list, *closest_list = NULL;
-    uint64_t id, closest_id = 0;
-    
-    bool desc = false;
-
-    if (cache->cascade_by) {
-        desc = (cache->query->terms[
-            cache->cascade_by - 1].src.id & EcsDesc) != 0;
-    }
-
-    /* Find closest smaller group id */
-    while (ecs_map_next(&it)) {
-        id = ecs_map_key(&it);
-
-        if (!desc) {
-            if (id >= group_id) {
-                continue;
-            }
-        } else {
-            if (id <= group_id) {
-                continue;
-            }
-        }
-
-        list = ecs_map_ptr(&it);
-        if (!list->last) {
-            ecs_assert(list->first == NULL, ECS_INTERNAL_ERROR, NULL);
-            continue;
-        }
-
-        bool comp;
-        if (!desc) {
-            comp = ((group_id - id) < (group_id - closest_id));
-        } else {
-            comp = ((group_id - id) > (group_id - closest_id));
-        }
-
-        if (!closest_list || comp) {
-            closest_id = id;
-            closest_list = list;
-        }
-    }
-
-    if (closest_list) {
-        return closest_list->last;
-    } else {
-        return NULL; /* Group should be first in query */
-    }
-}
-
-/* Initialize group with first node */
-static
-void flecs_query_cache_create_group(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *match)
-{
-    uint64_t group_id = match->group_id;
-
-    /* If query has grouping enabled & this is a new/empty group, find
-     * the insertion point for the group */
-    ecs_query_cache_table_match_t *insert_after = 
-        flecs_query_cache_find_group_insertion_node(cache, group_id);
-
-    if (!insert_after) {
-        /* This group should appear first in the query list */
-        ecs_query_cache_table_match_t *query_first = cache->list.first;
-        if (query_first) {
-            /* If this is not the first match for the query, insert before it */
-            match->next = query_first;
-            query_first->prev = match;
-            cache->list.first = match;
-        } else {
-            /* If this is the first match of the query, initialize its list */
-            ecs_assert(cache->list.last == NULL, ECS_INTERNAL_ERROR, NULL);
-            cache->list.first = match;
-            cache->list.last = match;
-        }
-    } else {
-        ecs_assert(cache->list.first != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(cache->list.last != NULL, ECS_INTERNAL_ERROR, NULL);
-
-        /* This group should appear after another group */
-        ecs_query_cache_table_match_t *insert_before = insert_after->next;
-        if (match != insert_after) {
-            match->prev = insert_after;
-        }
-        insert_after->next = match;
-        match->next = insert_before;
-        if (insert_before) {
-            insert_before->prev = match;
-        } else {
-            ecs_assert(cache->list.last == insert_after, 
-                ECS_INTERNAL_ERROR, NULL);
-                
-            /* This group should appear last in the query list */
-            cache->list.last = match;
-        }
-    }
-}
-
-/* Find the list the node should be part of */
-static
-ecs_query_cache_table_list_t* flecs_query_cache_get_node_list(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *match)
-{
-    if (cache->group_by_callback) {
-        return flecs_query_cache_get_group(cache, match->group_id);
-    } else {
-        return &cache->list;
-    }
-}
-
-/* Find or create the list the node should be part of */
-static
-ecs_query_cache_table_list_t* flecs_query_cache_ensure_node_list(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *match)
-{
-    if (cache->group_by_callback) {
-        return flecs_query_cache_ensure_group(cache, match->group_id);
-    } else {
-        return &cache->list;
-    }
-}
-
-/* Remove node from list */
-static
-void flecs_query_cache_remove_table_node(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *match)
-{
-    ecs_query_cache_table_match_t *prev = match->prev;
-    ecs_query_cache_table_match_t *next = match->next;
-
-    ecs_assert(prev != match, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(next != match, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(!prev || prev != next, ECS_INTERNAL_ERROR, NULL);
-
-    ecs_query_cache_table_list_t *list = 
-        flecs_query_cache_get_node_list(cache, match);
-
-    if (!list || !list->first) {
-        /* If list contains no matches, the match must be empty */
-        ecs_assert(!list || list->last == NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(prev == NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(next == NULL, ECS_INTERNAL_ERROR, NULL);
-        return;
-    }
-
-    ecs_assert(prev != NULL || cache->list.first == match, 
-        ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(next != NULL || cache->list.last == match, 
-        ECS_INTERNAL_ERROR, NULL);
-
-    if (prev) {
-        prev->next = next;
-    }
-    if (next) {
-        next->prev = prev;
-    }
-
-    ecs_assert(list->info.table_count > 0, ECS_INTERNAL_ERROR, NULL);
-    list->info.table_count --;
-
-    if (cache->group_by_callback) {
-        uint64_t group_id = match->group_id;
-
-        /* Make sure query.list is updated if this is the first or last group */
-        if (cache->list.first == match) {
-            ecs_assert(prev == NULL, ECS_INTERNAL_ERROR, NULL);
-            cache->list.first = next;
-            prev = next;
-        }
-        if (cache->list.last == match) {
-            ecs_assert(next == NULL, ECS_INTERNAL_ERROR, NULL);
-            cache->list.last = prev;
-            next = prev;
-        }
-
-        ecs_assert(cache->list.info.table_count > 0, ECS_INTERNAL_ERROR, NULL);
-        cache->list.info.table_count --;
-        list->info.match_count ++;
-
-        /* Make sure group list only contains nodes that belong to the group */
-        if (prev && prev->group_id != group_id) {
-            /* The previous node belonged to another group */
-            prev = next;
-        }
-        if (next && next->group_id != group_id) {
-            /* The next node belonged to another group */
-            next = prev;
-        }
-
-        /* Do check again, in case both prev & next belonged to another group */
-        if ((!prev && !next) || (prev && prev->group_id != group_id)) {
-            /* There are no more matches left in this group */
-            flecs_query_cache_remove_group(cache, group_id);
-            list = NULL;
-        }
-    }
-
-    if (list) {
-        if (list->first == match) {
-            list->first = next;
-        }
-        if (list->last == match) {
-            list->last = prev;
-        }
-    }
-
-    match->prev = NULL;
-    match->next = NULL;
-
-    cache->match_count ++;
-}
-
-/* Add node to list */
-static
-void flecs_query_cache_insert_table_node(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *match)
-{
-    /* Node should not be part of an existing list */
-    ecs_assert(match->prev == NULL && match->next == NULL, 
-        ECS_INTERNAL_ERROR, NULL);
-
-    /* If this is the first match, activate system */
-    if (!cache->list.first && cache->entity) {
-        ecs_remove_id(cache->query->world, cache->entity, EcsEmpty);
-    }
-
-    flecs_query_cache_compute_group_id(cache, match);
-
-    ecs_query_cache_table_list_t *list = 
-        flecs_query_cache_ensure_node_list(cache, match);
-
-    if (list->last) {
-        ecs_assert(cache->list.first != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(cache->list.last != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(list->first != NULL, ECS_INTERNAL_ERROR, NULL);
-
-        ecs_query_cache_table_match_t *last = list->last;
-        ecs_query_cache_table_match_t *last_next = last->next;
-
-        match->prev = last;
-        match->next = last_next;
-        last->next = match;
-
-        if (last_next) {
-            last_next->prev = match;
-        }
-
-        list->last = match;
-
-        if (cache->group_by_callback) {
-            /* Make sure to update query list if this is the last group */
-            if (cache->list.last == last) {
-                cache->list.last = match;
-            }
-        }
-    } else {
-        ecs_assert(list->first == NULL, ECS_INTERNAL_ERROR, NULL);
-
-        list->first = match;
-        list->last = match;
-
-        if (cache->group_by_callback) {
-            /* Initialize group with its first node */
-            flecs_query_cache_create_group(cache, match);
-        }
-    }
-
-    if (cache->group_by_callback) {
-        list->info.table_count ++;
-        list->info.match_count ++;
-    }
-
-    cache->list.info.table_count ++;
-    cache->match_count ++;
-
-    ecs_assert(match->prev != match, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(match->next != match, ECS_INTERNAL_ERROR, NULL);
-
-    ecs_assert(list->first != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(list->last != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(list->last == match, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(cache->list.first != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(cache->list.last != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(cache->list.first->prev == NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(cache->list.last->next == NULL, ECS_INTERNAL_ERROR, NULL);
-}
-
-static
-ecs_query_cache_table_match_t* flecs_query_cache_cache_add(
-    ecs_world_t *world,
-    ecs_query_cache_table_t *elem)
-{
-    ecs_query_cache_table_match_t *result = 
-        flecs_bcalloc(&world->allocators.query_table_match);
-
-    if (!elem->first) {
-        elem->first = result;
-        elem->last = result;
-    } else {
-        ecs_assert(elem->last != NULL, ECS_INTERNAL_ERROR, NULL);
-        elem->last->next_match = result;
-        elem->last = result;
-    }
-
-    return result;
-}
-
-/* The group by function for cascade computes the tree depth for the table type.
- * This causes tables in the query cache to be ordered by depth, which ensures
- * breadth-first iteration order. */
-static
-uint64_t flecs_query_cache_group_by_cascade(
-    ecs_world_t *world,
-    ecs_table_t *table,
-    ecs_id_t id,
-    void *ctx)
-{
-    (void)id;
-    ecs_term_t *term = ctx;
-    ecs_entity_t rel = term->trav;
-    int32_t depth = flecs_relation_depth(world, rel, table);
-    return flecs_ito(uint64_t, depth);
-}
-
-static
-ecs_query_cache_table_match_t* flecs_query_cache_add_table_match(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_t *qt,
-    ecs_table_t *table)
-{
-    /* Add match for table. One table can have more than one match, if
-     * the query contains wildcards. */
-    ecs_query_cache_table_match_t *qm = flecs_query_cache_cache_add(
-        cache->query->world, qt);
-    
-    qm->table = table;
-    qm->trs = flecs_balloc(&cache->allocators.pointers);
-
-    /* Insert match to iteration list if table is not empty */
-    flecs_query_cache_insert_table_node(cache, qm);
-
-    return qm;
-}
-
-static
-void flecs_query_cache_set_table_match(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *qm,
-    ecs_iter_t *it)
-{
-    ecs_query_t *query = cache->query;
-    int8_t i, field_count = query->field_count;
-
-    ecs_assert(field_count > 0, ECS_INTERNAL_ERROR, NULL);
-
-    /* Reset resources in case this is an existing record */
-    ecs_os_memcpy_n(ECS_CONST_CAST(ecs_table_record_t**, qm->trs), 
-        it->trs, ecs_table_record_t*, field_count);
-
-    /* Find out whether to store result-specific ids array or fixed array */
-    ecs_id_t *ids = cache->query->ids;
-    for (i = 0; i < field_count; i ++) {
-        if (it->ids[i] != ids[i]) {
-            break;
-        }
-    }
-
-    if (i != field_count) {
-        if (qm->ids == ids || !qm->ids) {
-            qm->ids = flecs_balloc(&cache->allocators.ids);
-        }
-        ecs_os_memcpy_n(qm->ids, it->ids, ecs_id_t, field_count);
-    } else {
-        if (qm->ids != ids) {
-            flecs_bfree(&cache->allocators.ids, qm->ids);
-            qm->ids = ids;
-        }
-    }
-
-    /* Find out whether to store result-specific sources array or fixed array */
-    for (i = 0; i < field_count; i ++) {
-        if (it->sources[i]) {
-            break;
-        }
-    }
-
-    if (i != field_count) {
-        if (qm->sources == cache->sources || !qm->sources) {
-            qm->sources = flecs_balloc(&cache->allocators.ids);
-        }
-        ecs_os_memcpy_n(qm->sources, it->sources, ecs_entity_t, field_count);
-        if (!qm->tables) {
-            qm->tables = flecs_balloc(&cache->allocators.pointers);
-        }
-        for (i = 0; i < field_count; i ++) {
-            if (it->trs[i]) {
-                qm->tables[i] = it->trs[i]->hdr.table;
-            }
-        }
-    } else {
-        if (qm->sources != cache->sources) {
-            flecs_bfree(&cache->allocators.ids, qm->sources);
-            qm->sources = cache->sources;
-        }
-        if (qm->tables) {
-            flecs_bfree(&cache->allocators.pointers, qm->tables);
-            qm->tables = NULL;
-        }
-    }
-
-    qm->set_fields = it->set_fields;
-    qm->up_fields = it->up_fields;
-}
-
-static
-ecs_query_cache_table_t* flecs_query_cache_table_insert(
-    ecs_world_t *world,
-    ecs_query_cache_t *cache,
-    ecs_table_t *table)
-{
-    ecs_query_cache_table_t *qt = flecs_bcalloc(&world->allocators.query_table);
-    if (table) {
-        qt->table_id = table->id;
-    } else {
-        qt->table_id = 0;
-    }
-
-    ecs_table_cache_insert(&cache->cache, table, 
-        ECS_CONST_CAST(ecs_table_cache_hdr_t*, &qt->hdr));
-
-    return qt;
-}
-
-/** Populate query cache with tables */
-static
-void flecs_query_cache_match_tables(
-    ecs_world_t *world,
-    ecs_query_cache_t *cache)
-{
-    ecs_table_t *table = NULL;
-    ecs_query_cache_table_t *qt = NULL;
-
-    ecs_iter_t it = ecs_query_iter(world, cache->query);
-    ECS_BIT_SET(it.flags, EcsIterNoData);
-    ECS_BIT_SET(it.flags, EcsIterTableOnly);
-
-    while (ecs_query_next(&it)) {
-        if ((table != it.table) || (!it.table && !qt)) {
-            /* New table matched, add record to cache */
-            table = it.table;
-            qt = flecs_query_cache_table_insert(world, cache, table);
-            ecs_dbg_3("query cache matched existing table [%s]", NULL);
-        }
-
-        ecs_query_cache_table_match_t *qm = 
-            flecs_query_cache_add_table_match(cache, qt, table);
-        flecs_query_cache_set_table_match(cache, qm, &it);
-    }
-}
-
-static
-bool flecs_query_cache_match_table(
-    ecs_world_t *world,
-    ecs_query_cache_t *cache,
-    ecs_table_t *table)
-{
-    if (!ecs_map_is_init(&cache->cache.index)) {
-        return false;
-    }
-
-    ecs_query_cache_table_t *qt = NULL;
-    ecs_query_t *q = cache->query;
-
-#ifndef FLECS_SANITIZE
-    if (!flecs_table_bloom_filter_test(table, q->bloom_filter)) {
-        return false;
-    }
-#endif
-
-    /* Iterate uncached query for table to check if it matches. If this is a
-     * wildcard query, a table can match multiple times. */
-    ecs_iter_t it = flecs_query_iter(world, q);
-    it.flags |= EcsIterNoData;
-    ecs_iter_set_var_as_table(&it, 0, table);
-
-    while (ecs_query_next(&it)) {
-        ecs_assert(it.table == table, ECS_INTERNAL_ERROR, NULL);
-        if (qt == NULL) {
-            table = it.table;
-            qt = flecs_query_cache_table_insert(world, cache, table);
-        }
-
-        ecs_query_cache_table_match_t *qm = flecs_query_cache_add_table_match(
-            cache, qt, table);
-        flecs_query_cache_set_table_match(cache, qm, &it);
-    }
-
-#ifdef FLECS_SANITIZE
-    /* Sanity check to make sure bloom filter is correct */
-    if (qt != NULL) {
-        ecs_assert(flecs_table_bloom_filter_test(table, q->bloom_filter),
-            ECS_INTERNAL_ERROR, NULL);
-    }
-#endif
-
-    return qt != NULL;
-}
-
-static
-bool flecs_query_cache_has_refs(
-    ecs_query_cache_t *cache)
-{
-    ecs_term_t *terms = cache->query->terms;
-    int32_t i, count = cache->query->term_count;
-    for (i = 0; i < count; i ++) {
-        if (terms[i].src.id & (EcsUp | EcsIsEntity)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static
-void flecs_query_cache_for_each_component_monitor(
-    ecs_world_t *world,
-    ecs_query_impl_t *impl,
-    ecs_query_cache_t *cache,
-    void(*callback)(
-        ecs_world_t* world,
-        ecs_id_t id,
-        ecs_query_t *q))
-{
-    ecs_query_t *q = &impl->pub;
-    ecs_term_t *terms = cache->query->terms;
-    int32_t i, count = cache->query->term_count;
-
-    for (i = 0; i < count; i++) {
-        ecs_term_t *term = &terms[i];
-        ecs_term_ref_t *src = &term->src;
-
-        if (src->id & EcsUp) {
-            callback(world, ecs_pair(term->trav, EcsWildcard), q);
-            if (term->trav != EcsIsA) {
-                callback(world, ecs_pair(EcsIsA, EcsWildcard), q);
-            }
-            callback(world, term->id, q);
-
-        } else if (src->id & EcsSelf && !ecs_term_match_this(term)) {
-            callback(world, term->id, q);
-        }
-    }
-}
-
-static
-bool flecs_query_cache_is_term_ref_supported(
-    ecs_term_ref_t *ref)
-{
-    if (!(ref->id & EcsIsVariable)) {
-        return true;
-    }
-    if (ecs_id_is_wildcard(ref->id)) {
-        return true;
-    }
-    return false;
-}
-
-static
-int flecs_query_cache_process_signature(
-    ecs_world_t *world,
-    ecs_query_impl_t *impl,
-    ecs_query_cache_t *cache)
-{
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_term_t *terms = cache->query->terms;
-    int32_t i, count = cache->query->term_count;
-
-    for (i = 0; i < count; i ++) {
-        ecs_term_t *term = &terms[i];
-        ecs_term_ref_t *first = &term->first;
-        ecs_term_ref_t *src = &term->src;
-        ecs_term_ref_t *second = &term->second;
-
-        bool is_src_ok = flecs_query_cache_is_term_ref_supported(src);
-        bool is_first_ok = flecs_query_cache_is_term_ref_supported(first);
-        bool is_second_ok = flecs_query_cache_is_term_ref_supported(second);
-
-        (void)first;
-        (void)second;
-        (void)is_src_ok;
-        (void)is_first_ok;
-        (void)is_second_ok;
-
-        /* Queries do not support named variables */
-        ecs_check(is_src_ok || ecs_term_match_this(term),
-            ECS_UNSUPPORTED, NULL);
-        ecs_check(is_first_ok, ECS_UNSUPPORTED, NULL);
-        ecs_check(is_second_ok,  ECS_UNSUPPORTED, NULL);
-        ecs_check(term->inout != EcsInOutFilter, ECS_INVALID_PARAMETER,
-            "invalid usage of InOutFilter for query");
-
-        if (src->id & EcsCascade) {
-            ecs_assert(cache->cascade_by == 0, ECS_INVALID_PARAMETER,
-                "query can only have one cascade term");
-            cache->cascade_by = i + 1;
-        }
-    }
-
-    impl->pub.flags |= 
-        (ecs_flags32_t)(flecs_query_cache_has_refs(cache) * EcsQueryHasRefs);
-
-    flecs_query_cache_for_each_component_monitor(
-        world, impl, cache, flecs_monitor_register);
-
-    return 0;
-error:
-    return -1;
-}
-
-/* Remove table */
-static
-void flecs_query_cache_table_match_free(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_match_t *first)
-{
-    ecs_query_cache_table_match_t *cur, *next;
-    ecs_world_t *world = cache->query->world;
-
-    for (cur = first; cur != NULL; cur = next) {
-        flecs_bfree(&cache->allocators.pointers, ECS_CONST_CAST(void*, cur->trs));
-
-        if (cur->ids != cache->query->ids) {
-            flecs_bfree(&cache->allocators.ids, cur->ids);
-        }
-
-        if (cur->sources != cache->sources) {
-            flecs_bfree(&cache->allocators.ids, cur->sources);
-        }
-
-        if (cur->tables) {
-            flecs_bfree(&cache->allocators.pointers, cur->tables);
-        }
-
-        if (cur->monitor) {
-            flecs_bfree(&cache->allocators.monitors, cur->monitor);
-        }
-
-        flecs_query_cache_remove_table_node(cache, cur);
-
-        next = cur->next_match;
-
-        flecs_bfree(&world->allocators.query_table_match, cur);
-    }
-}
-
-static
-void flecs_query_cache_table_free(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_t *elem)
-{
-    flecs_query_cache_table_match_free(cache, elem->first);
-    flecs_bfree(&cache->query->world->allocators.query_table, elem);
-}
-
-static
-void flecs_query_cache_unmatch_table(
-    ecs_query_cache_t *cache,
-    ecs_table_t *table,
-    ecs_query_cache_table_t *elem)
-{
-    if (!elem) {
-        elem = ecs_table_cache_get(&cache->cache, table);
-    }
-    if (elem) {
-        ecs_table_cache_remove(&cache->cache, elem->table_id, 
-            ECS_CONST_CAST(ecs_table_cache_hdr_t*, &elem->hdr));
-        flecs_query_cache_table_free(cache, elem);
-    }
-}
-
-/* Rematch system with tables after a change happened to a watched entity */
-static
-void flecs_query_cache_rematch_tables(
-    ecs_world_t *world,
-    ecs_query_impl_t *impl)
-{
-    flecs_poly_assert(world, ecs_world_t);
-
-    ecs_iter_t it;
-    ecs_table_t *table = NULL;
-    ecs_query_cache_table_t *qt = NULL;
-    ecs_query_cache_table_match_t *qm = NULL;
-    ecs_query_cache_t *cache = impl->cache;
-
-    if (cache->monitor_generation == world->monitor_generation) {
-        return;
-    }
-
-    ecs_os_perf_trace_push("flecs.query.rematch");
-
-    cache->monitor_generation = world->monitor_generation;
-
-    it = ecs_query_iter(world, cache->query);
-    ECS_BIT_SET(it.flags, EcsIterNoData);
-
-    world->info.rematch_count_total ++;
-    int32_t rematch_count = ++ cache->rematch_count;
-
-    ecs_time_t t = {0};
-    if (world->flags & EcsWorldMeasureFrameTime) {
-        ecs_time_measure(&t);
-    }
-
-    while (ecs_query_next(&it)) {
-        if ((table != it.table) || (!it.table && !qt)) {
-            if (qm && qm->next_match) {
-                flecs_query_cache_table_match_free(cache, qm->next_match);
-                qm->next_match = NULL;
-            }
-
-            table = it.table;
-
-            qt = ecs_table_cache_get(&cache->cache, table);
-            if (!qt) {
-                qt = flecs_query_cache_table_insert(world, cache, table);
-            }
-
-            ecs_assert(qt->hdr.table == table, ECS_INTERNAL_ERROR, NULL);
-            qt->rematch_count = rematch_count;
-            qm = NULL;
-        }
-        if (!qm) {
-            qm = qt->first;
-        } else {
-            qm = qm->next_match;
-        }
-        if (!qm) {
-            qm = flecs_query_cache_add_table_match(cache, qt, table);
-        }
-
-        flecs_query_cache_set_table_match(cache, qm, &it);
-
-        if (table && cache->group_by_callback) {
-            if (flecs_query_cache_get_group_id(cache, table) != qm->group_id) {
-                /* Update table group */
-                flecs_query_cache_remove_table_node(cache, qm);
-                flecs_query_cache_insert_table_node(cache, qm);
-            }
-        }
-    }
-
-    if (qm && qm->next_match) {
-        flecs_query_cache_table_match_free(cache, qm->next_match);
-        qm->next_match = NULL;
-    }
-
-    /* Iterate all tables in cache, remove ones that weren't just matched */
-    ecs_table_cache_iter_t cache_it;
-    if (flecs_table_cache_all_iter(&cache->cache, &cache_it)) {
-        while ((qt = flecs_table_cache_next(&cache_it, ecs_query_cache_table_t))) {
-            if (qt->rematch_count != rematch_count) {
-                flecs_query_cache_unmatch_table(cache, qt->hdr.table, qt);
-            }
-        }
-    }
-
-    if (world->flags & EcsWorldMeasureFrameTime) {
-        world->info.rematch_time_total += (ecs_ftime_t)ecs_time_measure(&t);
-    }
-
-    ecs_os_perf_trace_pop("flecs.query.rematch");
-}
-
-/* -- Private API -- */
-
-void flecs_query_cache_notify(
-    ecs_world_t *world,
-    ecs_query_t *q,
-    ecs_query_cache_event_t *event)
-{
-    flecs_poly_assert(q, ecs_query_t);
-    ecs_query_impl_t *impl = flecs_query_impl(q);
-    ecs_query_cache_t *cache = impl->cache;
-
-    switch(event->kind) {
-    case EcsQueryTableMatch:
-        /* Creation of new table */
-        flecs_query_cache_match_table(world, cache, event->table);
-        break;
-    case EcsQueryTableUnmatch:
-        /* Deletion of table */
-        flecs_query_cache_unmatch_table(cache, event->table, NULL);
-        break;
-    case EcsQueryTableRematch:
-        /* Rematch tables of query */
-        flecs_query_cache_rematch_tables(world, impl);
-        break;
-    }
-}
-
-static
-int flecs_query_cache_order_by(
-    ecs_world_t *world,
-    ecs_query_impl_t *impl,
-    ecs_entity_t order_by,
-    ecs_order_by_action_t order_by_callback,
-    ecs_sort_table_action_t action)
-{
-    ecs_check(impl != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_check(cache != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(!ecs_id_is_wildcard(order_by), 
-        ECS_INVALID_PARAMETER, NULL);
-
-    /* Find order_by term & make sure it is queried for */
-    const ecs_query_t *query = cache->query;
-    int32_t i, count = query->term_count;
-    int32_t order_by_term = -1;
-
-    if (order_by) {
-        for (i = 0; i < count; i ++) {
-            const ecs_term_t *term = &query->terms[i];
-            
-            /* Only And terms are supported */
-            if (term->id == order_by && term->oper == EcsAnd) {
-                order_by_term = i;
-                break;
-            }
-        }
-
-        if (order_by_term == -1) {
-            char *id_str = ecs_id_str(world, order_by);
-            ecs_err("order_by component '%s' is not queried for", id_str);
-            ecs_os_free(id_str);
-            goto error;
-        }
-    }
-
-    cache->order_by = order_by;
-    cache->order_by_callback = order_by_callback;
-    cache->order_by_term = order_by_term;
-    cache->order_by_table_callback = action;
-
-    ecs_vec_fini_t(NULL, &cache->table_slices, ecs_query_cache_table_match_t);
-    flecs_query_cache_sort_tables(world, impl);
-
-    if (!cache->table_slices.array) {
-        flecs_query_cache_build_sorted_tables(cache);
-    }
-
-    return 0;
-error:
-    return -1;
-}
-
-static
-void flecs_query_cache_group_by(
-    ecs_query_cache_t *cache,
-    ecs_entity_t sort_component,
-    ecs_group_by_action_t group_by)
-{   
-    ecs_check(cache->group_by == 0, ECS_INVALID_OPERATION,
-        "query is already grouped");
-    ecs_check(cache->group_by_callback == 0, ECS_INVALID_OPERATION,
-        "query is already grouped");
-
-    if (!group_by) {
-        /* Builtin function that groups by relationship */
-        group_by = flecs_query_cache_default_group_by;   
-    }
-
-    cache->group_by = sort_component;
-    cache->group_by_callback = group_by;
-
-    ecs_map_init_w_params(&cache->groups, 
-        &cache->query->world->allocators.query_table_list);
-error:
-    return;
-}
-
-static
-void flecs_query_cache_on_event(
-    ecs_iter_t *it)
-{
-    /* Because this is the observer::run callback, checking if this is event is
-     * already handled is not done for us. */
-    ecs_world_t *world = it->world;
-    ecs_observer_t *o = it->ctx;
-    ecs_observer_impl_t *o_impl = flecs_observer_impl(o);
-    if (o_impl->last_event_id) {
-        if (o_impl->last_event_id[0] == world->event_id) {
-            return;
-        }
-        o_impl->last_event_id[0] = world->event_id;
-    }
-
-    ecs_query_impl_t *impl = o->ctx;
-    flecs_poly_assert(impl, ecs_query_t);
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_table_t *table = it->table;
-    ecs_entity_t event = it->event;
-
-    if (event == EcsOnTableCreate) {
-        /* Creation of new table */
-        if (flecs_query_cache_match_table(world, cache, table)) {
-            if (ecs_should_log_3()) {
-                char *table_str = ecs_table_str(world, table);
-                ecs_dbg_3("query cache event: %s for [%s]", 
-                    ecs_get_name(world, event),
-                    table_str);
-                ecs_os_free(table_str);
-            }
-        }
-        return;
-    }
-
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    /* The observer isn't doing the matching because the query can do it more
-     * efficiently by checking the table with the query cache. */
-    if (ecs_table_cache_get(&cache->cache, table) == NULL) {
-        return;
-    }
-
-    if (ecs_should_log_3()) {
-        char *table_str = ecs_table_str(world, table);
-        ecs_dbg_3("query cache event: %s for [%s]", 
-            ecs_get_name(world, event),
-            table_str);
-        ecs_os_free(table_str);
-    }
-
-    if (event == EcsOnTableDelete) {
-        /* Deletion of table */
-        flecs_query_cache_unmatch_table(cache, table, NULL);
-        return;
-    }
-}
-
-static
-void flecs_query_cache_table_cache_free(
-    ecs_query_cache_t *cache)
-{
-    ecs_table_cache_iter_t it;
-    ecs_query_cache_table_t *qt;
-
-    if (flecs_table_cache_all_iter(&cache->cache, &it)) {
-        while ((qt = flecs_table_cache_next(&it, ecs_query_cache_table_t))) {
-            flecs_query_cache_table_free(cache, qt);
-        }
-    }
-
-    ecs_table_cache_fini(&cache->cache);
-}
-
-static
-void flecs_query_cache_allocators_init(
-    ecs_query_cache_t *cache)
-{
-    int32_t field_count = cache->query->field_count;
-    if (field_count) {
-        flecs_ballocator_init(&cache->allocators.pointers, 
-            field_count * ECS_SIZEOF(ecs_table_record_t*));
-        flecs_ballocator_init(&cache->allocators.ids, 
-            field_count * ECS_SIZEOF(ecs_id_t));
-        flecs_ballocator_init(&cache->allocators.monitors,
-            (1 + field_count) * ECS_SIZEOF(int32_t));
-    }
-}
-
-static
-void flecs_query_cache_allocators_fini(
-    ecs_query_cache_t *cache)
-{
-    int32_t field_count = cache->query->field_count;
-    if (field_count) {
-        flecs_ballocator_fini(&cache->allocators.pointers);
-        flecs_ballocator_fini(&cache->allocators.ids);
-        flecs_ballocator_fini(&cache->allocators.monitors);
-    }
-}
-
-void flecs_query_cache_fini(
-    ecs_query_impl_t *impl)
-{
-    ecs_world_t *world = impl->pub.world;
-    ecs_stage_t *stage = impl->stage;
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    if (cache->observer) {
-        flecs_observer_fini(cache->observer);
-    }
-
-    ecs_group_delete_action_t on_delete = cache->on_group_delete;
-    if (on_delete) {
-        ecs_map_iter_t it = ecs_map_iter(&cache->groups);
-        while (ecs_map_next(&it)) {
-            ecs_query_cache_table_list_t *group = ecs_map_ptr(&it);
-            uint64_t group_id = ecs_map_key(&it);
-            on_delete(world, group_id, group->info.ctx, cache->group_by_ctx);
-        }
-        cache->on_group_delete = NULL;
-    }
-
-    if (cache->group_by_ctx_free) {
-        if (cache->group_by_ctx) {
-            cache->group_by_ctx_free(cache->group_by_ctx);
-        }
-    }
-
-    flecs_query_cache_for_each_component_monitor(world, impl, cache,
-        flecs_monitor_unregister);
-    flecs_query_cache_table_cache_free(cache);
-
-    ecs_map_fini(&cache->groups);
-
-    ecs_vec_fini_t(NULL, &cache->table_slices, ecs_query_cache_table_match_t);
-    
-    if (cache->query->term_count) {
-        flecs_bfree(&cache->allocators.ids, cache->sources);
-    }
-
-    flecs_query_cache_allocators_fini(cache);
-    ecs_query_fini(cache->query);
-
-    flecs_bfree(&stage->allocators.query_cache, cache);
-}
-
-/* -- Public API -- */
-
-ecs_query_cache_t* flecs_query_cache_init(
-    ecs_query_impl_t *impl,
-    const ecs_query_desc_t *const_desc)
-{
-    ecs_world_t *world = impl->pub.real_world;
-    flecs_poly_assert(world, ecs_world_t);
-
-    ecs_stage_t *stage = impl->stage;
-    flecs_poly_assert(stage, ecs_stage_t);
-
-    ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_check(const_desc != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(const_desc->_canary == 0, ECS_INVALID_PARAMETER,
-        "ecs_query_desc_t was not initialized to zero");
-    ecs_check(!(world->flags & EcsWorldFini), ECS_INVALID_OPERATION, 
-        "cannot create query during world fini");
-
-    /* Create private version of desc to create the uncached query that will
-     * populate the query cache. */
-    ecs_query_desc_t desc = *const_desc;
-    ecs_entity_t entity = desc.entity;
-    desc.cache_kind = EcsQueryCacheNone; /* Don't create caches recursively */
-    desc.group_by_callback = NULL;
-    desc.group_by = 0;
-    desc.order_by_callback = NULL;
-    desc.order_by = 0;
-    desc.entity = 0;
-
-    /* Don't pass ctx/binding_ctx to uncached query */
-    desc.ctx = NULL;
-    desc.binding_ctx = NULL;
-    desc.ctx_free = NULL;
-    desc.binding_ctx_free = NULL;    
-
-    ecs_query_cache_t *result = flecs_bcalloc(&stage->allocators.query_cache);
-    result->entity = entity;
-    impl->cache = result;
-
-    ecs_observer_desc_t observer_desc = { .query = desc };
-    observer_desc.query.flags |= EcsQueryNested;
-
-    ecs_flags32_t query_flags = const_desc->flags | world->default_query_flags;
-    desc.flags |= EcsQueryMatchEmptyTables | EcsQueryTableOnly | EcsQueryNested;
-
-    /* order_by is not compatible with matching empty tables, as it causes
-     * a query to return table slices, not entire tables. */
-    if (const_desc->order_by_callback) {
-        query_flags &= ~EcsQueryMatchEmptyTables;
-    }
-
-    ecs_query_t *q = result->query = ecs_query_init(world, &desc);
-    if (!q) {
-        goto error;
-    }
-
-    /* The uncached query used to populate the cache always matches empty 
-     * tables. This flag determines whether the empty tables are stored 
-     * separately in the cache or are treated as regular tables. This is only
-     * enabled if the user requested that the query matches empty tables. */
-    ECS_BIT_COND(q->flags, EcsQueryCacheYieldEmptyTables, 
-        !!(query_flags & EcsQueryMatchEmptyTables));
-
-    flecs_query_cache_allocators_init(result);
-
-    /* Zero'd out sources array that's used for results that only match $this. 
-     * This reduces the amount of memory used by the cache, and improves CPU
-     * cache locality during iteration when doing source checks. */
-    if (result->query->term_count) {
-        result->sources = flecs_bcalloc(&result->allocators.ids);
-    }
-
-    if (q->term_count) {
-        observer_desc.run = flecs_query_cache_on_event;
-        observer_desc.ctx = impl;
-
-        int32_t event_index = 0;
-        observer_desc.events[event_index ++] = EcsOnTableCreate;
-        observer_desc.events[event_index ++] = EcsOnTableDelete;
-        observer_desc.flags_ = EcsObserverBypassQuery;
-
-        /* ecs_query_init could have moved away resources from the terms array
-         * in the descriptor, so use the terms array from the query. */
-        ecs_os_memcpy_n(observer_desc.query.terms, q->terms, 
-            ecs_term_t, q->term_count);
-        observer_desc.query.expr = NULL; /* Already parsed */
-
-        result->observer = flecs_observer_init(world, entity, &observer_desc);
-        if (!result->observer) {
-            goto error;
-        }
-    }
-
-    result->prev_match_count = -1;
-
-    if (ecs_should_log_1()) {
-        char *query_expr = ecs_query_str(result->query);
-        ecs_dbg_1("#[green]query#[normal] [%s] created", 
-            query_expr ? query_expr : "");
-        ecs_os_free(query_expr);
-    }
-
-    ecs_log_push_1();
-
-    if (flecs_query_cache_process_signature(world, impl, result)) {
-        goto error;
-    }
-
-    /* Group before matching so we won't have to move tables around later */
-    int32_t cascade_by = result->cascade_by;
-    if (cascade_by) {
-        flecs_query_cache_group_by(result, result->query->terms[cascade_by - 1].id,
-            flecs_query_cache_group_by_cascade);
-        result->group_by_ctx = &result->query->terms[cascade_by - 1];
-    }
-
-    if (const_desc->group_by_callback || const_desc->group_by) {
-        ecs_check(!result->cascade_by, ECS_INVALID_PARAMETER,
-            "cannot mix cascade and group_by");
-        flecs_query_cache_group_by(result, 
-            const_desc->group_by, const_desc->group_by_callback);
-        result->group_by_ctx = const_desc->group_by_ctx;
-        result->on_group_create = const_desc->on_group_create;
-        result->on_group_delete = const_desc->on_group_delete;
-        result->group_by_ctx_free = const_desc->group_by_ctx_free;
-    }
-
-    ecs_table_cache_init(world, &result->cache);
-    flecs_query_cache_match_tables(world, result);
-
-    if (const_desc->order_by_callback) {
-        if (flecs_query_cache_order_by(world, impl, 
-            const_desc->order_by, const_desc->order_by_callback,
-            const_desc->order_by_table_callback))
-        {
-            goto error;
-        }
-    }
-
-    if (entity) {
-        if (!flecs_query_cache_table_count(result) && result->query->term_count){
-            ecs_add_id(world, entity, EcsEmpty);
-        }
-    }
-
-    ecs_log_pop_1();
-
-    return result;
-error:
-    return NULL;
-}
-
-ecs_query_cache_table_t* flecs_query_cache_get_table(
-    ecs_query_cache_t *cache,
-    ecs_table_t *table)
-{
-    return ecs_table_cache_get(&cache->cache, table);
-}
-
-void ecs_iter_set_group(
-    ecs_iter_t *it,
-    uint64_t group_id)
-{
-    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(it->next == ecs_query_next, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(!(it->flags & EcsIterIsValid), ECS_INVALID_PARAMETER, 
-        "cannot set group during iteration");
-
-    ecs_query_iter_t *qit = &it->priv_.iter.query;
-    ecs_query_impl_t *q = flecs_query_impl(qit->query);
-    ecs_check(q != NULL, ECS_INVALID_PARAMETER, NULL);
-    flecs_poly_assert(q, ecs_query_t);
-    ecs_query_cache_t *cache = q->cache;
-    ecs_check(cache != NULL, ECS_INVALID_PARAMETER, NULL);
-
-    ecs_query_cache_table_list_t *node = flecs_query_cache_get_group(
-        cache, group_id);
-    if (!node) {
-        qit->node = NULL;
-        qit->last = NULL;
-        return;
-    }
-
-    ecs_query_cache_table_match_t *first = node->first;
-    if (first) {
-        qit->node = node->first;
-        qit->last = node->last;
-    } else {
-        qit->node = NULL;
-        qit->last = NULL;
-    }
-    
-error:
-    return;
-}
-
-const ecs_query_group_info_t* ecs_query_get_group_info(
-    const ecs_query_t *query,
-    uint64_t group_id)
-{
-    flecs_poly_assert(query, ecs_query_t);
-    ecs_query_cache_table_list_t *node = flecs_query_cache_get_group(
-        flecs_query_impl(query)->cache, group_id);
-    if (!node) {
-        return NULL;
-    }
-    
-    return &node->info;
-}
-
-void* ecs_query_get_group_ctx(
-    const ecs_query_t *query,
-    uint64_t group_id)
-{
-    flecs_poly_assert(query, ecs_query_t);
-    const ecs_query_group_info_t *info = ecs_query_get_group_info(
-        query, group_id);
-    if (!info) {
-        return NULL;
-    } else {
-        return info->ctx;
-    }
-}
-
-/**
- * @file query/engine/cache_iter.c
- * @brief Compile query term.
- */
-
-
-static
-void flecs_query_update_node_up_trs(
-    const ecs_query_run_ctx_t *ctx,
-    ecs_query_cache_table_match_t *node)
-{
-    ecs_termset_t fields = node->up_fields & node->set_fields;
-    if (fields) {
-        const ecs_query_impl_t *impl = ctx->query;
-        ecs_query_cache_t *cache = impl->cache;
-        const ecs_query_t *q = cache->query;
-        int32_t f, field_count = q->field_count;
-        int8_t *field_map = cache->field_map;
-        for (f = 0; f < field_count; f ++) {
-            if (!(fields & (1llu << f))) {
-                continue;
-            }
-
-            ecs_entity_t src = node->sources[f];
-            if (src) {
-                ecs_record_t *r = flecs_entities_get(ctx->world, src);
-                ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
-                ecs_assert(r->table != NULL, ECS_INTERNAL_ERROR, NULL);
-                if (r->table != node->tables[f]) {
-                    ecs_component_record_t *cr = flecs_components_get(
-                        ctx->world, q->ids[f]);
-                    const ecs_table_record_t *tr = node->trs[f] = 
-                        flecs_component_get_table(cr, r->table);
-                    ecs_assert(tr != NULL, ECS_INTERNAL_ERROR, NULL);
-                    ctx->it->trs[field_map ? field_map[f] : f] = tr;
-                    node->tables[f] = r->table;
-                }
-            }
-        }
-    }
-}
-
-static
-ecs_query_cache_table_match_t* flecs_query_cache_next(
-    const ecs_query_run_ctx_t *ctx,
-    bool match_empty)
-{
-    ecs_iter_t *it = ctx->it;
-    ecs_query_iter_t *qit = &it->priv_.iter.query;
-
-    repeat: {
-        ecs_query_cache_table_match_t *node = qit->node;
-        ecs_query_cache_table_match_t *prev = qit->prev;
-
-        if (prev != qit->last) {
-            ecs_assert(node != NULL, ECS_INTERNAL_ERROR, NULL);
-            ctx->vars[0].range.table = node->table;
-            it->group_id = node->group_id;
-            qit->node = node->next;
-            qit->prev = node;
-            if (node) {
-                if (!ecs_table_count(node->table)) {
-                    if (!match_empty) {
-                        if (ctx->query->pub.flags & EcsQueryHasMonitor) {
-                            flecs_query_sync_match_monitor(
-                                flecs_query_impl(qit->query), node);
-                        }
-                        goto repeat;
-                    }
-                }
-            }
-            return node;
-        }
-    }
-
-    return NULL;
-}
-
-static
-ecs_query_cache_table_match_t* flecs_query_test(
-    const ecs_query_run_ctx_t *ctx,
-    bool redo)
-{
-    ecs_iter_t *it = ctx->it;
-    if (!redo) {
-        ecs_var_t *var = &ctx->vars[0];
-        ecs_table_t *table = var->range.table;
-        ecs_assert(table != NULL, ECS_INVALID_OPERATION, 
-            "the variable set on the iterator is missing a table");
-
-        ecs_query_cache_table_t *qt = flecs_query_cache_get_table(
-            ctx->query->cache, table);
-        if (!qt) {
-            return NULL;
-        }
-
-        ecs_query_iter_t *qit = &it->priv_.iter.query;
-        qit->prev = NULL;
-        qit->node = qt->first;
-        qit->last = qt->last;
-    }
-
-    return flecs_query_cache_next(ctx, true);
-}
-
-static
-void flecs_query_cache_init_mapped_fields(
-    const ecs_query_run_ctx_t *ctx,
-    ecs_query_cache_table_match_t *node)
-{
-    ecs_iter_t *it = ctx->it;
-    const ecs_query_impl_t *impl = ctx->query;
-    ecs_query_cache_t *cache = impl->cache;
-    int32_t i, field_count = cache->query->field_count;
-    int8_t *field_map = cache->field_map;
-
-    for (i = 0; i < field_count; i ++) {
-        int8_t field_index = field_map[i];
-        it->trs[field_index] = node->trs[i];
-
-        it->ids[field_index] = node->ids[i];
-        it->sources[field_index] = node->sources[i];
-
-        ecs_termset_t bit = (ecs_termset_t)(1u << i);
-        ecs_termset_t field_bit = (ecs_termset_t)(1u << field_index);
-
-        ECS_TERMSET_COND(it->set_fields, field_bit, node->set_fields & bit);
-        ECS_TERMSET_COND(it->up_fields, field_bit, node->up_fields & bit);
-    }
-}
-
-/* Iterate cache for query that's partially cached */
-bool flecs_query_cache_search(
-    const ecs_query_run_ctx_t *ctx)
-{
-    ecs_query_cache_table_match_t *node = flecs_query_cache_next(ctx,
-        ctx->query->pub.flags & EcsQueryMatchEmptyTables);
-    if (!node) {
-        return false;
-    }
-
-    flecs_query_cache_init_mapped_fields(ctx, node);
-    ctx->vars[0].range.count = node->count;
-    ctx->vars[0].range.offset = node->offset;
-
-    flecs_query_update_node_up_trs(ctx, node);
-
-    return true;
-}
-
-/* Iterate cache for query that's entirely cached */
-bool flecs_query_is_cache_search(
-    const ecs_query_run_ctx_t *ctx)
-{
-    ecs_query_cache_table_match_t *node = flecs_query_cache_next(ctx,
-        ctx->query->pub.flags & EcsQueryMatchEmptyTables);
-    if (!node) {
-        return false;
-    }
-
-    ecs_iter_t *it = ctx->it;
-    it->trs = node->trs;
-    it->ids = node->ids;
-    it->sources = node->sources;
-    it->set_fields = node->set_fields;
-    it->up_fields = node->up_fields;
-
-    flecs_query_update_node_up_trs(ctx, node);
-
-    return true;
-}
-
-/* Test if query that is entirely cached matches constrained $this */
-bool flecs_query_cache_test(
-    const ecs_query_run_ctx_t *ctx,
-    bool redo)
-{
-    ecs_query_cache_table_match_t *node = flecs_query_test(ctx, redo);
-    if (!node) {
-        return false;
-    }
-
-    flecs_query_cache_init_mapped_fields(ctx, node);
-    flecs_query_update_node_up_trs(ctx, node);
-
-    return true;
-}
-
-/* Test if query that is entirely cached matches constrained $this */
-bool flecs_query_is_cache_test(
-    const ecs_query_run_ctx_t *ctx,
-    bool redo)
-{
-    ecs_query_cache_table_match_t *node = flecs_query_test(ctx, redo);
-    if (!node) {
-        return false;
-    }
-
-    ecs_iter_t *it = ctx->it;
-    it->trs = node->trs;
-    it->ids = node->ids;
-    it->sources = node->sources;
-
-    flecs_query_update_node_up_trs(ctx, node);
-
-    return true;
-}
-
-/**
- * @file query/engine/cache_order_by.c
- * @brief Order by implementation
- */
-
-
-ECS_SORT_TABLE_WITH_COMPARE(_, flecs_query_cache_sort_table_generic, order_by, static)
-
-static
-void flecs_query_cache_sort_table(
-    ecs_world_t *world,
-    ecs_table_t *table,
-    int32_t column_index,
-    ecs_order_by_action_t compare,
-    ecs_sort_table_action_t sort)
-{
-    int32_t count = ecs_table_count(table);
-    if (!count) {
-        /* Nothing to sort */
-        return;
-    }
-    
-    if (count < 2) {
-        return;
-    }
-
-    ecs_entity_t *entities = table->data.entities;
-    void *ptr = NULL;
-    int32_t size = 0;
-    if (column_index != -1) {
-        ecs_column_t *column = &table->data.columns[column_index];
-        ecs_type_info_t *ti = column->ti;
-        size = ti->size;
-        ptr = column->data;
-    }
-
-    if (sort) {
-        sort(world, table, entities, ptr, size, 0, count - 1, compare);
-    } else {
-        flecs_query_cache_sort_table_generic(
-            world, table, entities, ptr, size, 0, count - 1, compare);
-    }
-}
-
-/* Helper struct for building sorted table ranges */
-typedef struct sort_helper_t {
-    ecs_query_cache_table_match_t *match;
-    ecs_entity_t *entities;
-    const void *ptr;
-    int32_t row;
-    int32_t elem_size;
-    int32_t count;
-    bool shared;
-} sort_helper_t;
-
-static
-const void* ptr_from_helper(
-    sort_helper_t *helper)
-{
-    ecs_assert(helper->row < helper->count, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(helper->elem_size >= 0, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(helper->row >= 0, ECS_INTERNAL_ERROR, NULL);
-    if (helper->shared) {
-        return helper->ptr;
-    } else {
-        return ECS_ELEM(helper->ptr, helper->elem_size, helper->row);
-    }
-}
-
-static
-ecs_entity_t e_from_helper(
-    sort_helper_t *helper)
-{
-    if (helper->row < helper->count) {
-        return helper->entities[helper->row];
-    } else {
-        return 0;
-    }
-}
-
-static
-void flecs_query_cache_build_sorted_table_range(
-    ecs_query_cache_t *cache,
-    ecs_query_cache_table_list_t *list)
-{
-    ecs_world_t *world = cache->query->world;
-    flecs_poly_assert(world, ecs_world_t);
-    ecs_assert(!(world->flags & EcsWorldMultiThreaded), ECS_UNSUPPORTED,
-        "cannot sort query in multithreaded mode");
-
-    ecs_entity_t id = cache->order_by;
-    ecs_order_by_action_t compare = cache->order_by_callback;
-    int32_t table_count = list->info.table_count;
-    if (!table_count) {
-        return;
-    }
-
-    ecs_vec_init_if_t(&cache->table_slices, ecs_query_cache_table_match_t);
-    int32_t to_sort = 0;
-    int32_t order_by_term = cache->order_by_term;
-
-    sort_helper_t *helper = flecs_alloc_n(
-        &world->allocator, sort_helper_t, table_count);
-    ecs_query_cache_table_match_t *cur, *end = list->last->next;
-    for (cur = list->first; cur != end; cur = cur->next) {
-        ecs_table_t *table = cur->table;
-
-        if (ecs_table_count(table) == 0) {
-            continue;
-        }
-
-        if (id) {
-            const ecs_term_t *term = &cache->query->terms[order_by_term];
-            int32_t field = term->field_index;
-            ecs_size_t size = cache->query->sizes[field];
-            ecs_entity_t src = cur->sources[field];
-            if (src == 0) {
-                int32_t column_index = cur->trs[field]->column;
-                ecs_column_t *column = &table->data.columns[column_index];
-                helper[to_sort].ptr = column->data;
-                helper[to_sort].elem_size = size;
-                helper[to_sort].shared = false;
-            } else {
-                ecs_record_t *r = flecs_entities_get(world, src);
-                ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
-                ecs_assert(r->table != NULL, ECS_INTERNAL_ERROR, NULL);
-
-                if (term->src.id & EcsUp) {
-                    ecs_entity_t base = 0;
-                    ecs_search_relation(world, r->table, 0, id, 
-                        EcsIsA, term->src.id & EcsTraverseFlags, &base, 0, 0);
-                    if (base && base != src) { /* Component could be inherited */
-                        r = flecs_entities_get(world, base);
-                    }
-                }
-
-                helper[to_sort].ptr = ecs_table_get_id(
-                    world, r->table, id, ECS_RECORD_TO_ROW(r->row));
-                helper[to_sort].elem_size = size;
-                helper[to_sort].shared = true;
-            }
-            ecs_assert(helper[to_sort].ptr != NULL, ECS_INTERNAL_ERROR, NULL);
-            ecs_assert(helper[to_sort].elem_size != 0, ECS_INTERNAL_ERROR, NULL);
-        } else {
-            helper[to_sort].ptr = NULL;
-            helper[to_sort].elem_size = 0;
-            helper[to_sort].shared = false;
-        }
-
-        helper[to_sort].match = cur;
-        helper[to_sort].entities = table->data.entities;
-        helper[to_sort].row = 0;
-        helper[to_sort].count = ecs_table_count(table);
-        to_sort ++;      
-    }
-
-    if (!to_sort) {
-        goto done;
-    }
-
-    bool proceed;
-    do {
-        int32_t j, min = 0;
-        proceed = true;
-
-        ecs_entity_t e1;
-        while (!(e1 = e_from_helper(&helper[min]))) {
-            min ++;
-            if (min == to_sort) {
-                proceed = false;
-                break;
-            }
-        }
-
-        if (!proceed) {
-            break;
-        }
-
-        for (j = min + 1; j < to_sort; j++) {
-            ecs_entity_t e2 = e_from_helper(&helper[j]);
-            if (!e2) {
-                continue;
-            }
-
-            const void *ptr1 = ptr_from_helper(&helper[min]);
-            const void *ptr2 = ptr_from_helper(&helper[j]);
-
-            if (compare(e1, ptr1, e2, ptr2) > 0) {
-                min = j;
-                e1 = e_from_helper(&helper[min]);
-            }
-        }
-
-        sort_helper_t *cur_helper = &helper[min];
-        if (!cur || cur->trs != cur_helper->match->trs) {
-            cur = ecs_vec_append_t(NULL, &cache->table_slices, 
-                ecs_query_cache_table_match_t);
-            *cur = *(cur_helper->match);
-            cur->offset = cur_helper->row;
-            cur->count = 1;
-        } else {
-            cur->count ++;
-        }
-
-        cur_helper->row ++;
-    } while (proceed);
-
-    /* Iterate through the vector of slices to set the prev/next ptrs. This
-     * can't be done while building the vector, as reallocs may occur */
-    int32_t i, count = ecs_vec_count(&cache->table_slices);    
-    ecs_query_cache_table_match_t *nodes = ecs_vec_first(&cache->table_slices);
-    for (i = 0; i < count; i ++) {
-        nodes[i].prev = &nodes[i - 1];
-        nodes[i].next = &nodes[i + 1];
-    }
-
-    if (nodes) {
-        nodes[0].prev = NULL;
-        nodes[i - 1].next = NULL;
-    }
-
-done:
-    flecs_free_n(&world->allocator, sort_helper_t, table_count, helper);
-}
-
-void flecs_query_cache_build_sorted_tables(
-    ecs_query_cache_t *cache)
-{
-    ecs_vec_clear(&cache->table_slices);
-
-    if (cache->group_by_callback) {
-        /* Populate sorted node list in grouping order */
-        ecs_query_cache_table_match_t *cur = cache->list.first;
-        if (cur) {
-            do {
-                /* Find list for current group */
-                uint64_t group_id = cur->group_id;
-                ecs_query_cache_table_list_t *list = ecs_map_get_deref(
-                    &cache->groups, ecs_query_cache_table_list_t, group_id);
-                ecs_assert(list != NULL, ECS_INTERNAL_ERROR, NULL);
-
-                /* Sort tables in current group */
-                flecs_query_cache_build_sorted_table_range(cache, list);
-
-                /* Find next group to sort */
-                cur = list->last->next;
-            } while (cur);
-        }
-    } else {
-        flecs_query_cache_build_sorted_table_range(cache, &cache->list);
-    }
-}
-
-void flecs_query_cache_sort_tables(
-    ecs_world_t *world,
-    ecs_query_impl_t *impl)
-{
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_order_by_action_t compare = cache->order_by_callback;
-    if (!compare) {
-        return;
-    }
-
-    ecs_sort_table_action_t sort = cache->order_by_table_callback;
-    
-    ecs_entity_t order_by = cache->order_by;
-    int32_t order_by_term = cache->order_by_term;
-
-    /* Iterate over non-empty tables. Don't bother with empty tables as they
-     * have nothing to sort */
-
-    bool tables_sorted = false;
-
-    ecs_component_record_t *cr = flecs_components_get(world, order_by);
-    ecs_table_cache_iter_t it;
-    ecs_query_cache_table_t *qt;
-    flecs_table_cache_all_iter(&cache->cache, &it);
-
-    while ((qt = flecs_table_cache_next(&it, ecs_query_cache_table_t))) {
-        ecs_table_t *table = qt->hdr.table;
-        bool dirty = false;
-
-        if (flecs_query_check_table_monitor(impl, qt, 0)) {
-            tables_sorted = true;
-            dirty = true;
-
-            if (!ecs_table_count(table)) {
-                /* If table is empty, there's a chance the query won't iterate it
-                * so update the match monitor here. */
-                ecs_query_cache_table_match_t *cur, *next;
-                for (cur = qt->first; cur != NULL; cur = next) {
-                    flecs_query_sync_match_monitor(impl, cur);
-                    next = cur->next_match;
-                }
-            }
-        }
-
-        int32_t column = -1;
-        if (order_by) {
-            if (flecs_query_check_table_monitor(impl, qt, order_by_term + 1)) {
-                dirty = true;
-            }
-
-            if (dirty) {
-                column = -1;
-
-                const ecs_table_record_t *tr = flecs_component_get_table(
-                    cr, table);
-                if (tr) {
-                    column = tr->column;
-                }
-
-                if (column == -1) {
-                    /* Component is shared, no sorting is needed */
-                    dirty = false;
-                }
-            }
-        }
-
-        if (!dirty) {
-            continue;
-        }
-
-        /* Something has changed, sort the table. Prefers using 
-         * flecs_query_cache_sort_table when available */
-        flecs_query_cache_sort_table(world, table, column, compare, sort);
-        tables_sorted = true;
-    }
-
-    if (tables_sorted || cache->match_count != cache->prev_match_count) {
-        flecs_query_cache_build_sorted_tables(cache);
-        cache->match_count ++; /* Increase version if tables changed */
-    }
-}
-
-/**
- * @file query/engine/change_detection.c
- * @brief Compile query term.
- */
-
-
-typedef struct {
-    ecs_table_t *table;
-    int32_t column;
-} flecs_table_column_t;
-
-static
-void flecs_query_get_column_for_field(
-    const ecs_query_t *q,
-    ecs_query_cache_table_match_t *match,
-    int32_t field,
-    flecs_table_column_t *out)
-{
-    ecs_assert(field >= 0, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(field < q->field_count, ECS_INTERNAL_ERROR, NULL);
-    (void)q;
-
-    const ecs_table_record_t *tr = match->trs[field];
-    ecs_table_t *table = tr->hdr.table;
-    int32_t column = tr->column;
-
-    out->table = table;
-    out->column = column;
-}
-
-/* Get match monitor. Monitors are used to keep track of whether components 
- * matched by the query in a table have changed. */
-static
-bool flecs_query_get_match_monitor(
-    ecs_query_impl_t *impl,
-    ecs_query_cache_table_match_t *match)
-{
-    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
-    if (match->monitor) {
-        return false;
-    }
-
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    int32_t *monitor = flecs_balloc(&cache->allocators.monitors);
-    monitor[0] = 0;
-
-    /* Mark terms that don't need to be monitored. This saves time when reading
-     * and/or updating the monitor. */
-    const ecs_query_t *q = cache->query;
-    int32_t i, field = -1, term_count = q->term_count;
-    flecs_table_column_t tc;
-
-    for (i = 0; i < term_count; i ++) {
-        if (field == q->terms[i].field_index) {
-            if (monitor[field + 1] != -1) {
-                continue;
-            }
-        }
-
-        field = q->terms[i].field_index;
-        monitor[field + 1] = -1;
-
-        /* If term isn't read, don't monitor */
-        if (q->terms[i].inout != EcsIn && 
-            q->terms[i].inout != EcsInOut &&
-            q->terms[i].inout != EcsInOutDefault) {
-            continue;
-        }
-
-        /* Don't track fields that aren't set */
-        if (!(match->set_fields & (1llu << field))) {
-            continue;
-        }
-
-        flecs_query_get_column_for_field(q, match, field, &tc);
-        if (tc.column == -1) {
-            continue; /* Don't track terms that aren't stored */
-        }
-
-        monitor[field + 1] = 0;
-    }
-
-    match->monitor = monitor;
-
-    impl->pub.flags |= EcsQueryHasMonitor;
-
-    return true;
-}
-
-/* Get monitor for fixed query terms. Fixed terms are handled separately as they
- * don't require a query cache, and fixed terms aren't stored in the cache. */
-static
-bool flecs_query_get_fixed_monitor(
-    ecs_query_impl_t *impl,
-    bool check)
-{
-    ecs_query_t *q = &impl->pub;
-    ecs_world_t *world = q->real_world;
-    ecs_term_t *terms = q->terms;
-    int32_t i, term_count = q->term_count;
-
-    if (!impl->monitor) {
-        impl->monitor = flecs_alloc_n(&impl->stage->allocator, 
-            int32_t, q->field_count);
-        check = false; /* If the monitor is new, initialize it with dirty state */
-    }
-
-    for (i = 0; i < term_count; i ++) {
-        ecs_term_t *term = &terms[i];
-        int16_t field_index = term->field_index;
-
-        if (!(q->read_fields & flecs_ito(uint32_t, 1 << field_index))) {
-            continue; /* If term doesn't read data there's nothing to track */
-        }
-
-        if (!(term->src.id & EcsIsEntity)) {
-            continue; /* Not a term with a fixed source */
-        }
-
-        ecs_entity_t src = ECS_TERM_REF_ID(&term->src);
-        ecs_assert(src != 0, ECS_INTERNAL_ERROR, NULL);
-
-        ecs_record_t *r = flecs_entities_get(world, src);
-        if (!r || !r->table) {
-            continue; /* Entity is empty, nothing to track */
-        }
-
-        ecs_component_record_t *cr = flecs_components_get(world, term->id);
-        if (!cr) {
-            continue; /* If id doesn't exist, entity can't have it */
-        }
-
-        const ecs_table_record_t *tr = flecs_component_get_table(cr, r->table);
-        if (!tr) {
-            continue; /* Entity doesn't have the component */
-        }
-
-        /* Copy/check column dirty state from table */
-        int32_t *dirty_state = flecs_table_get_dirty_state(world, r->table);
-        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
-
-        if (!check) {
-            impl->monitor[field_index] = dirty_state[tr->column + 1];
-        } else {
-            if (impl->monitor[field_index] != dirty_state[tr->column + 1]) {
-                return true;
-            }
-        }
-    }
-
-    return !check;
-}
-
-bool flecs_query_update_fixed_monitor(
-    ecs_query_impl_t *impl)
-{
-    return flecs_query_get_fixed_monitor(impl, false);
-}
-
-bool flecs_query_check_fixed_monitor(
-    ecs_query_impl_t *impl)
-{
-    return flecs_query_get_fixed_monitor(impl, true);
-}
-
-
-/* Check if single match term has changed */
-static
-bool flecs_query_check_match_monitor_term(
-    ecs_query_impl_t *impl,
-    ecs_query_cache_table_match_t *match,
-    int32_t field)
-{
-    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    if (flecs_query_get_match_monitor(impl, match)) {
-        return true;
-    }
-
-    int32_t *monitor = match->monitor;
-    int32_t state = monitor[field];
-    if (state == -1) {
-        return false;
-    }
-
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_table_t *table = match->table;
-    if (table) {
-        int32_t *dirty_state = flecs_table_get_dirty_state(
-            cache->query->world, table);
-        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
-        if (!field) {
-            return monitor[0] != dirty_state[0];
-        }
-    } else if (!field) {
-        return false;
-    }
-
-    flecs_table_column_t cur;
-    flecs_query_get_column_for_field(
-        &impl->pub, match, field - 1, &cur);
-    ecs_assert(cur.column != -1, ECS_INTERNAL_ERROR, NULL);
-
-    return monitor[field] != flecs_table_get_dirty_state(
-        cache->query->world, cur.table)[cur.column + 1];
-}
-
-static
-bool flecs_query_check_cache_monitor(
-    ecs_query_impl_t *impl)
-{
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    /* If the match count changed, tables got matched/unmatched for the
-     * cache, so return that the query has changed. */
-    if (cache->match_count != cache->prev_match_count) {
-        return true;
-    }
-
-    ecs_table_cache_iter_t it;
-    if (flecs_table_cache_all_iter(&cache->cache, &it)) {
-        ecs_query_cache_table_t *qt;
-        while ((qt = flecs_table_cache_next(&it, ecs_query_cache_table_t))) {
-            if (flecs_query_check_table_monitor(impl, qt, -1)) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-static
-void flecs_query_init_query_monitors(
-    ecs_query_impl_t *impl)
-{
-    /* Change monitor for cache */
-    ecs_query_cache_t *cache = impl->cache;
-    if (cache) {
-        ecs_query_cache_table_match_t *cur = cache->list.first;
-
-        /* Ensure each match has a monitor */
-        for (; cur != NULL; cur = cur->next) {
-            ecs_query_cache_table_match_t *match = 
-                (ecs_query_cache_table_match_t*)cur;
-            flecs_query_get_match_monitor(impl, match);
-        }
-    }
-}
-
-static
-bool flecs_query_check_match_monitor(
-    ecs_query_impl_t *impl,
-    ecs_query_cache_table_match_t *match,
-    const ecs_iter_t *it)
-{
-    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    if (flecs_query_get_match_monitor(impl, match)) {
-        return true;
-    }
-
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    int32_t *monitor = match->monitor;
-    ecs_table_t *table = match->table;
-    int32_t *dirty_state = NULL;
-    if (table) {
-        dirty_state = flecs_table_get_dirty_state(
-            cache->query->world, table);
-        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
-        if (monitor[0] != dirty_state[0]) {
-            return true;
-        }
-    }
-
-    const ecs_query_t *query = cache->query;
-    ecs_world_t *world = query->world;
-    int32_t i, field_count = query->field_count;
-    ecs_entity_t *sources = match->sources;
-    const ecs_table_record_t **trs = it ? it->trs : match->trs;
-    ecs_flags64_t set_fields = it ? it->set_fields : match->set_fields;
-    
-    ecs_assert(trs != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    for (i = 0; i < field_count; i ++) {
-        int32_t mon = monitor[i + 1];
-        if (mon == -1) {
-            continue;
-        }
-
-        if (!(set_fields & (1llu << i))) {
-            continue;
-        }
-
-        int32_t column = trs[i]->column;
-        ecs_entity_t src = sources[i];
-        if (!src) {
-            if (column >= 0) {
-                /* owned component */
-                ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
-                if (mon != dirty_state[column + 1]) {
-                    return true;
-                }
-                continue;
-            } else if (column == -1) {
-                continue; /* owned but not a component */
-            }
-        }
-
-        /* Component from non-this source */
-        ecs_entity_t fixed_src = match->sources[i];
-        ecs_table_t *src_table = ecs_get_table(world, fixed_src);
-        ecs_assert(src_table != NULL, ECS_INTERNAL_ERROR, NULL);
-        int32_t *src_dirty_state = flecs_table_get_dirty_state(
-            world, src_table);
-        if (mon != src_dirty_state[column + 1]) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/* Check if any term for matched table has changed */
-bool flecs_query_check_table_monitor(
-    ecs_query_impl_t *impl,
-    ecs_query_cache_table_t *table,
-    int32_t field)
-{
-    ecs_query_cache_table_match_t *cur, *end = table->last->next;
-
-    for (cur = table->first; cur != end; cur = cur->next) {
-        ecs_query_cache_table_match_t *match = 
-            (ecs_query_cache_table_match_t*)cur;
-        if (field == -1) {
-            if (flecs_query_check_match_monitor(impl, match, NULL)) {
-                return true;
-            }
-        } else {
-            if (flecs_query_check_match_monitor_term(impl, match, field)) {
-                return true;
-            } 
-        }
-    }
-
-    return false;
-}
-
-void flecs_query_mark_fields_dirty(
-    ecs_query_impl_t *impl,
-    ecs_iter_t *it)
-{
-    ecs_query_t *q = &impl->pub;
-
-    /* Evaluate all writeable non-fixed fields, set fields */
-    ecs_termset_t write_fields = 
-        (ecs_termset_t)(q->write_fields & ~q->fixed_fields & it->set_fields);
-    if (!write_fields || (it->flags & EcsIterNoData)) {
-        return;
-    }
-
-    ecs_world_t *world = q->real_world;
-    int16_t i, field_count = q->field_count;
-    for (i = 0; i < field_count; i ++) {
-        ecs_termset_t field_bit = (ecs_termset_t)(1u << i);
-        if (!(write_fields & field_bit)) {
-            continue; /* If term doesn't write data there's nothing to track */
-        }
-
-        ecs_entity_t src = it->sources[i];
-        ecs_table_t *table;
-        if (!src) {
-            table = it->table;
-        } else {
-            ecs_record_t *r = flecs_entities_get(world, src);
-            if (!r || !(table = r->table)) {
-                continue;
-            }
-
-            if (q->shared_readonly_fields & flecs_ito(uint32_t, 1 << i)) {
-                /* Shared fields that aren't marked explicitly as out/inout 
-                 * default to readonly */
-                continue;
-            }
-        }
-
-        const ecs_table_record_t *tr = it->trs[i];
-        if (!tr) {
-            continue; /* Non-fragmenting component */
-        }
-
-        int32_t type_index = it->trs[i]->index;
-        ecs_assert(type_index >= 0, ECS_INTERNAL_ERROR, NULL);
-        
-        ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
-        int32_t *dirty_state = table->dirty_state;
-        if (!dirty_state) {
-            continue;
-        }
-
-        ecs_assert(type_index < table->type.count, ECS_INTERNAL_ERROR, NULL);
-        int32_t column = table->column_map[type_index];
-        dirty_state[column + 1] ++;
-    }
-}
-
-void flecs_query_mark_fixed_fields_dirty(
-    ecs_query_impl_t *impl,
-    ecs_iter_t *it)
-{
-    /* This function marks fields dirty for terms with fixed sources. */
-    ecs_query_t *q = &impl->pub;
-    ecs_termset_t fixed_write_fields = q->write_fields & q->fixed_fields;
-    if (!fixed_write_fields) {
-        return;
-    }
-
-    ecs_world_t *world = q->real_world;
-    int32_t i, field_count = q->field_count;
-    for (i = 0; i < field_count; i ++) {
-        if (!(fixed_write_fields & flecs_ito(uint32_t, 1 << i))) {
-            continue; /* If term doesn't write data there's nothing to track */
-        }
-
-        ecs_entity_t src = it->sources[i];
-        ecs_assert(src != 0, ECS_INTERNAL_ERROR, NULL);
-        ecs_record_t *r = flecs_entities_get(world, src);
-        ecs_table_t *table;
-        if (!r || !(table = r->table)) {
-            /* If the field is optional, it's possible that it didn't match */
-            continue;
-        }
-
-        int32_t *dirty_state = table->dirty_state;
-        if (!dirty_state) {
-            continue;
-        }
-
-        ecs_assert(it->trs[i]->column >= 0, ECS_INTERNAL_ERROR, NULL);
-        int32_t column = table->column_map[it->trs[i]->column];
-        dirty_state[column + 1] ++;
-    }
-}
-
-/* Synchronize match monitor with table dirty state */
-void flecs_query_sync_match_monitor(
-    ecs_query_impl_t *impl,
-    ecs_query_cache_table_match_t *match)
-{
-    ecs_assert(match != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    if (!match->monitor) {
-        if (impl->pub.flags & EcsQueryHasMonitor) {
-            flecs_query_get_match_monitor(impl, match);
-        } else {
-            return;
-        }
-    }
-
-    ecs_query_cache_t *cache = impl->cache;
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    int32_t *monitor = match->monitor;
-    ecs_table_t *table = match->table;
-    if (table) {
-        int32_t *dirty_state = flecs_table_get_dirty_state(
-            cache->query->world, table);
-        ecs_assert(dirty_state != NULL, ECS_INTERNAL_ERROR, NULL);
-        monitor[0] = dirty_state[0]; /* Did table gain/lose entities */
-    }
-
-    ecs_query_t *q = cache->query;
-    {
-        flecs_table_column_t tc;
-        int32_t t, term_count = q->term_count;
-        for (t = 0; t < term_count; t ++) {
-            int32_t field = q->terms[t].field_index;
-            if (monitor[field + 1] == -1) {
-                continue;
-            }
-
-            flecs_query_get_column_for_field(q, match, field, &tc);
-
-            /* Query for cache should never point to stage */
-            ecs_assert(q->world == q->real_world, ECS_INTERNAL_ERROR, NULL);
-
-            monitor[field + 1] = flecs_table_get_dirty_state(
-                q->world, tc.table)[tc.column + 1];
-        }
-    }
-
-    cache->prev_match_count = cache->match_count;
-}
-
-bool ecs_query_changed(
-    ecs_query_t *q)
-{
-    flecs_poly_assert(q, ecs_query_t);
-    ecs_query_impl_t *impl = flecs_query_impl(q);
-
-    ecs_assert(q->cache_kind != EcsQueryCacheNone, ECS_INVALID_OPERATION, 
-        "change detection is only supported on cached queries");
-
-    /* If query reads terms with fixed sources, check those first as that's 
-     * cheaper than checking entries in the cache. */
-    if (impl->monitor) {
-        if (flecs_query_check_fixed_monitor(impl)) {
-            return true;
-        }
-    }
-
-    /* Check cache for changes. We can't detect changes for terms that are not
-     * cached/cacheable and don't have a fixed source, since that requires 
-     * storing state per result, which doesn't happen for uncached queries. */
-    if (impl->cache) {
-        if (!(impl->pub.flags & EcsQueryHasMonitor)) {
-            flecs_query_init_query_monitors(impl);
-        }
-
-        /* Check cache entries for changes */
-        return flecs_query_check_cache_monitor(impl);
-    }
-
-    return false;
-}
-
-bool ecs_iter_changed(
-    ecs_iter_t *it)
-{
-    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(it->next == ecs_query_next, ECS_UNSUPPORTED, NULL);
-    ecs_check(ECS_BIT_IS_SET(it->flags, EcsIterIsValid), 
-        ECS_INVALID_PARAMETER, NULL);
-
-    ecs_query_iter_t *qit = &it->priv_.iter.query;
-    ecs_query_impl_t *impl = flecs_query_impl(qit->query);
-    ecs_query_t *q = &impl->pub;
-
-    /* First check for changes for terms with fixed sources, if query has any */
-    if (q->read_fields & q->fixed_fields) {
-        /* Detecting changes for uncached terms is costly, so only do it once 
-         * per iteration. */
-        if (!(it->flags & EcsIterFixedInChangeComputed)) {
-            it->flags |= EcsIterFixedInChangeComputed;
-            ECS_BIT_COND(it->flags, EcsIterFixedInChanged, 
-                flecs_query_check_fixed_monitor(impl));
-        }
-
-        if (it->flags & EcsIterFixedInChanged) {
-            return true;
-        }
-    }
-
-    /* If query has a cache, check for changes in current matched result */
-    if (impl->cache) {
-        ecs_query_cache_table_match_t *qm = 
-            (ecs_query_cache_table_match_t*)it->priv_.iter.query.prev;
-        ecs_check(qm != NULL, ECS_INVALID_PARAMETER, NULL);
-        return flecs_query_check_match_monitor(impl, qm, it);
-    }
-
-error:
-    return false;
-}
-
-void ecs_iter_skip(
-    ecs_iter_t *it)
-{
-    ecs_assert(it->next == ecs_query_next, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(ECS_BIT_IS_SET(it->flags, EcsIterIsValid), 
-        ECS_INVALID_PARAMETER, NULL);
-    it->flags |= EcsIterSkip;
-}
-
-/**
  * @file query/engine/eval.c
  * @brief Query engine implementation.
  */
@@ -75791,7 +76881,7 @@ void flecs_query_iter_run_ctx_init(
     ecs_query_run_ctx_t *ctx)
 {
     ecs_query_iter_t *qit = &it->priv_.iter.query;
-    ecs_query_impl_t *impl = ECS_CONST_CAST(ecs_query_impl_t*, qit->query);
+    ecs_query_impl_t *impl = ECS_CONST_CAST(ecs_query_impl_t*, it->query);
     ctx->world = it->real_world;
     ctx->query = impl;
     ctx->it = it;
@@ -75843,42 +76933,93 @@ void flecs_query_iter_constrain(
     /* Figure out whether this query can utilize specialized iterator modes for
      * improved performance. */
     ecs_flags32_t flags = q->flags;
+    ecs_flags32_t trivial_flags = EcsQueryIsTrivial|EcsQueryMatchOnlySelf;
     ecs_query_cache_t *cache = query->cache;
-    if (flags & EcsQueryIsTrivial) {
-        if ((flags & EcsQueryMatchOnlySelf)) {
-            if (it_written) {
-                /* When we're testing against an entity or table, set the $this
-                 * variable in advance since it won't change later on. This 
-                 * initializes it.count, it.entities and it.table. */
-                flecs_query_set_iter_this(it, &ctx);
 
-                if (!cache) {
-                    if (!(flags & EcsQueryMatchWildcards)) {
-                        it->flags |= EcsIterTrivialTest;
-                    }
-                } else if (flags & EcsQueryIsCacheable) {
-                    it->flags |= EcsIterTrivialTest|EcsIterTrivialCached;
-                }
-            } else {
-                if (!cache) {
-                    if (!(flags & EcsQueryMatchWildcards)) {
-                        it->flags |= EcsIterTrivialSearch;
-                    }
-                } else if (flags & EcsQueryIsCacheable) {
-                    if (!cache->order_by_callback) {
-                        it->flags |= EcsIterTrivialSearch|EcsIterTrivialCached;
-                    }
+    if (it_written) {
+        /* When we're testing against an entity or table, set the $this
+         * variable in advance since it won't change later on. This 
+         * initializes it.count, it.entities and it.table. */
+        flecs_query_set_iter_this(it, &ctx);
+
+        if (!cache) {
+            if ((flags & (trivial_flags)) == trivial_flags) {
+                if (!(flags & EcsQueryMatchWildcards)) {
+                    it->flags |= EcsIterTrivialTest;
+                    flecs_query_setids(NULL, false, &ctx);
                 }
             }
-
-            /* If we're using a specialized iterator mode, make sure to 
-             * initialize static component ids. Usually this is the first 
-             * instruction of a query plan, but because we're not running the
-             * query plan when using a specialized iterator mode, manually call
-             * the operation on iterator init. */
-            flecs_query_setids(NULL, false, &ctx);
+        } else if (flags & EcsQueryIsCacheable) {
+            if (!cache->order_by_callback && 
+                (cache->query->flags & EcsQueryTrivialCache && 
+                 !(query->pub.flags & EcsQueryHasChangeDetection))) 
+            {
+                it->flags |= EcsIterTrivialTest|EcsIterTrivialCached|
+                    EcsIterTrivialChangeDetection;
+                it->ids = cache->query->ids;
+                it->sources = cache->sources;
+                it->set_fields = flecs_uto(uint32_t, (1llu << it->field_count) - 1);
+            } else {
+                it->flags |= EcsIterTrivialTest|EcsIterCached;
+            }
+        }
+    } else {
+        if (!cache) { 
+            if ((flags & (trivial_flags)) == trivial_flags) {
+                if (!(flags & EcsQueryMatchWildcards)) {
+                    it->flags |= EcsIterTrivialSearch|
+                        EcsIterTrivialChangeDetection;
+                    flecs_query_setids(NULL, false, &ctx);
+                }
+            }
+        } else if (flags & EcsQueryIsCacheable) {
+            if (!cache->order_by_callback && 
+                (cache->query->flags & EcsQueryTrivialCache && 
+                 !(query->pub.flags & EcsQueryHasChangeDetection))) 
+            {
+                it->flags |= EcsIterTrivialSearch|EcsIterTrivialCached|
+                    EcsIterTrivialChangeDetection;
+                it->ids = cache->query->ids;
+                it->sources = cache->sources;
+                it->set_fields = flecs_uto(uint32_t, (1llu << it->field_count) - 1);
+            } else {
+                it->flags |= EcsIterTrivialSearch|EcsIterCached;
+            }
         }
     }
+}
+
+static
+void flecs_query_change_detection(
+    ecs_iter_t *it,
+    ecs_query_iter_t *qit,
+    ecs_query_impl_t *impl)
+{
+    /* Change detection */
+    if (!(it->flags & EcsIterSkip)) {
+        /* Mark table columns that are written to dirty */
+        flecs_query_mark_fields_dirty(impl, it);
+        if (qit->elem) {
+            if (impl->pub.flags & EcsQueryHasChangeDetection) {
+                /* If this query uses change detection, synchronize the
+                 * monitor for the iterated table with the query */
+                flecs_query_sync_match_monitor(impl, qit->elem);
+            }
+        }
+    }
+}
+
+static
+void flecs_query_self_change_detection(
+    ecs_iter_t *it,
+    ecs_query_iter_t *qit,
+    ecs_query_impl_t *impl)
+{
+    if (!it->table->dirty_state) {
+        return;
+    }
+
+    flecs_query_change_detection(it, qit, impl);
 }
 
 bool ecs_query_next(
@@ -75888,24 +77029,18 @@ bool ecs_query_next(
     ecs_assert(it->next == ecs_query_next, ECS_INVALID_PARAMETER, NULL);
 
     ecs_query_iter_t *qit = &it->priv_.iter.query;
-    ecs_query_impl_t *impl = ECS_CONST_CAST(ecs_query_impl_t*, qit->query);
+    ecs_query_impl_t *impl = ECS_CONST_CAST(ecs_query_impl_t*, it->query);
+    ecs_assert(impl != NULL, ECS_INTERNAL_ERROR, NULL);
+
     ecs_query_run_ctx_t ctx;
     flecs_query_iter_run_ctx_init(it, &ctx);
-    const ecs_query_op_t *ops = qit->ops;
 
     bool redo = it->flags & EcsIterIsValid;
     if (redo) {
-        /* Change detection */
-        if (!(it->flags & EcsIterSkip)) {
-            /* Mark table columns that are written to dirty */
-            flecs_query_mark_fields_dirty(impl, it);
-            if (qit->prev) {
-                if (ctx.query->pub.flags & EcsQueryHasMonitor) {
-                    /* If this query uses change detection, synchronize the
-                     * monitor for the iterated table with the query */
-                    flecs_query_sync_match_monitor(impl, qit->prev);
-                }
-            }
+        if (it->flags & EcsIterTrivialChangeDetection) {
+            flecs_query_self_change_detection(it, qit, impl);
+        } else {
+            flecs_query_change_detection(it, qit, impl);
         }
     }
 
@@ -75922,12 +77057,27 @@ bool ecs_query_next(
      * tests a single table or table range against the query. */
 
     if (it->flags & EcsIterTrivialCached) {
+        /* Trivial cache iterator. Only supported for search */
+        ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
+
+        if (it->flags & EcsIterTrivialSearch) {
+            if (flecs_query_is_trivial_cache_search(&ctx)) {
+                return true;
+            }
+        } else if (it->flags & EcsIterTrivialTest) {
+            if (flecs_query_is_trivial_cache_test(&ctx, redo)) {
+                return true;
+            }
+        }
+    } else if (it->flags & EcsIterCached) {
         /* Cached iterator modes */
         if (it->flags & EcsIterTrivialSearch) {
+            ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
             if (flecs_query_is_cache_search(&ctx)) {
                 goto trivial_search_yield;
             }
         } else if (it->flags & EcsIterTrivialTest) {
+            ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
             if (flecs_query_is_cache_test(&ctx, redo)) {
                 goto yield;
             }
@@ -75935,17 +77085,23 @@ bool ecs_query_next(
     } else {
         /* Uncached iterator modes */
         if (it->flags & EcsIterTrivialSearch) {
+            ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
+
             ecs_query_trivial_ctx_t *op_ctx = &ctx.op_ctx[0].is.trivial;
             if (flecs_query_is_trivial_search(&ctx, op_ctx, redo)) {
                 goto yield;
             }
         } else if (it->flags & EcsIterTrivialTest) {
+            ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
+
             int32_t fields = ctx.query->pub.term_count;
             ecs_flags64_t mask = (2llu << (fields - 1)) - 1;
             if (flecs_query_trivial_test(&ctx, redo, mask)) {
                 goto yield;
             }
         } else {
+            const ecs_query_op_t *ops = qit->ops;
+
             /* Default iterator mode. This enters the query VM dispatch loop. */
             if (flecs_query_run_until(
                 redo, &ctx, ops, -1, qit->op, impl->op_count - 1)) 
@@ -75967,6 +77123,8 @@ bool ecs_query_next(
             ECS_CONST_CAST(ecs_query_impl_t*, ctx.query));
     }
 
+    it->flags |= EcsIterSkip; /* Prevent change detection on fini */
+
     ecs_iter_fini(it);
     return false;
 
@@ -75979,12 +77137,49 @@ yield:
     return true;
 }
 
+bool flecs_query_trivial_cached_next(
+    ecs_iter_t *it)
+{
+    ecs_assert(it != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_query_iter_t *qit = &it->priv_.iter.query;
+    ecs_query_impl_t *impl = ECS_CONST_CAST(ecs_query_impl_t*, it->query);
+    ecs_assert(impl != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_query_run_ctx_t ctx;
+    flecs_query_iter_run_ctx_init(it, &ctx);
+
+    bool redo = it->flags & EcsIterIsValid;
+    if (redo) {
+        flecs_query_self_change_detection(it, qit, impl);
+    }
+
+    it->flags &= ~(EcsIterSkip);
+    it->flags |= EcsIterIsValid;
+    it->frame_offset += it->count;
+
+    ecs_assert(it->flags & EcsIterTrivialCached, ECS_INVALID_OPERATION,
+        "query does not have trivial cache, use ecs_query_next instead");
+    ecs_assert(it->flags & EcsIterTrivialSearch, ECS_INVALID_OPERATION,
+        "iterator has constrained variables, use ecs_query_next instead");
+    ecs_assert(impl->ops == NULL, ECS_INTERNAL_ERROR, NULL);
+
+    if (flecs_query_is_trivial_cache_search(&ctx)) {
+        return true;
+    }
+
+    it->flags |= EcsIterSkip; /* Prevent change detection on fini */
+
+    ecs_iter_fini(it);
+    return false;
+}
+
 static
 void flecs_query_iter_fini_ctx(
     ecs_iter_t *it,
     ecs_query_iter_t *qit)
 {
-    const ecs_query_impl_t *query = flecs_query_impl(qit->query);
+    const ecs_query_impl_t *query = flecs_query_impl(it->query);
     int32_t i, count = query->op_count;
     ecs_query_op_t *ops = query->ops;
     ecs_query_op_ctx_t *ctx = qit->op_ctx;
@@ -76026,14 +77221,19 @@ void flecs_query_iter_fini(
     ecs_iter_t *it)
 {
     ecs_query_iter_t *qit = &it->priv_.iter.query;
-    ecs_assert(qit->query != NULL, ECS_INTERNAL_ERROR, NULL);
-    flecs_poly_assert(qit->query, ecs_query_t);
-    int32_t op_count = flecs_query_impl(qit->query)->op_count;
-    int32_t var_count = flecs_query_impl(qit->query)->var_count;
+    const ecs_query_t *q = it->query;
+    ecs_assert(q != NULL, ECS_INTERNAL_ERROR, NULL);
+    flecs_poly_assert(q, ecs_query_t);
+    int32_t op_count = flecs_query_impl(q)->op_count;
+    int32_t var_count = flecs_query_impl(q)->var_count;
+
+    if (it->flags & EcsIterIsValid) {
+        flecs_query_change_detection(it, qit, flecs_query_impl(q));
+    }
 
 #ifdef FLECS_DEBUG
     if (it->flags & EcsIterProfile) {
-        char *str = ecs_query_plan_w_profile(qit->query, it);
+        char *str = ecs_query_plan_w_profile(q, it);
         printf("%s\n", str);
         ecs_os_free(str);
     }
@@ -76049,7 +77249,7 @@ void flecs_query_iter_fini(
     qit->vars = NULL;
     qit->written = NULL;
     qit->op_ctx = NULL;
-    qit->query = NULL;
+    it->query = NULL;
 }
 
 static
@@ -76110,6 +77310,10 @@ ecs_iter_t flecs_query_iter(
     ecs_query_iter_t *qit = &it.priv_.iter.query;
     ecs_check(q != NULL, ECS_INVALID_PARAMETER, NULL);
 
+#ifdef FLECS_DEBUG
+    flecs_check_exclusive_world_access_write(q->real_world);
+#endif
+
     flecs_query_validate_final_fields(q);
     
     flecs_poly_assert(q, ecs_query_t);
@@ -76146,32 +77350,16 @@ ecs_iter_t flecs_query_iter(
     it.up_fields = 0;
     flecs_query_apply_iter_flags(&it, q);
 
-    flecs_iter_init(it.world, &it, 
-        flecs_iter_cache_ids |
-        flecs_iter_cache_trs |
-        flecs_iter_cache_sources |
-        flecs_iter_cache_ptrs);
+    flecs_iter_init(it.world, &it, !impl->cache || !(q->flags & EcsQueryIsCacheable));
 
-    qit->query = q;
     qit->query_vars = impl->vars;
     qit->ops = impl->ops;
 
-    ecs_query_cache_t *cache = impl->cache;
-    if (cache) {
-        qit->node = cache->list.first;
-        qit->last = cache->list.last;
-
-        if (cache->order_by_callback && cache->list.info.table_count) {
-            flecs_query_cache_sort_tables(it.real_world, impl);
-            if (ecs_vec_count(&cache->table_slices)) {
-                qit->node = ecs_vec_first(&cache->table_slices);
-                qit->last = ecs_vec_last_t(
-                    &cache->table_slices, ecs_query_cache_table_match_t);
-            }
-        }
-
-        cache->prev_match_count = cache->match_count;
+    if (q->flags & EcsQueryMatchEmptyTables) {
+        it.flags |= EcsIterMatchEmptyTables;
     }
+
+    flecs_query_cache_iter_init(&it, qit, impl);
 
     if (var_count) {
         qit->vars = flecs_iter_calloc_n(&it, ecs_var_t, var_count);
@@ -76189,10 +77377,6 @@ ecs_iter_t flecs_query_iter(
     for (i = 1; i < var_count; i ++) {
         qit->vars[i].entity = EcsWildcard;
     }
-
-    it.variables = qit->vars;
-    it.variable_count = impl->pub.var_count;
-    it.variable_names = impl->pub.vars;
 
     /* Set flags for unconstrained query iteration. Can be reinitialized when
      * variables are constrained on iterator. */
@@ -76969,7 +78153,9 @@ bool flecs_query_sparse_with_id(
 
     if (!redo) {
         ecs_component_record_t *cr = flecs_components_get(ctx->world, id);
-        ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
+        if (!cr) {
+            return false;
+        }
 
         op_ctx->sparse = cr->sparse;
         if (!op_ctx->sparse) {
@@ -77038,7 +78224,9 @@ bool flecs_query_sparse_with_wildcard(
             op_ctx->cr = cr->pair->first.next;
         }
 
-        ecs_assert(op_ctx->cr != NULL, ECS_INTERNAL_ERROR, NULL);
+        if (!op_ctx->cr) {
+            return false;
+        }
     } else {
         if (op_ctx->exclusive) {
             return flecs_query_sparse_with_exclusive(op, true, ctx, not);

@@ -17,7 +17,6 @@ typedef struct ecs_world_allocators_t {
     ecs_map_params_t ptr;
     ecs_map_params_t query_table_list;
     ecs_block_allocator_t query_table;
-    ecs_block_allocator_t query_table_match;
     ecs_block_allocator_t graph_edge_lo;
     ecs_block_allocator_t graph_edge;
     ecs_block_allocator_t id_record;
@@ -117,6 +116,10 @@ struct ecs_world_t {
      * cached pointer is still valid. */
     uint32_t table_version[ECS_TABLE_VERSION_ARRAY_SIZE];
 
+    /* Same as table_version, but only increases after the column pointers of
+     * a table change. */
+    uint32_t table_column_version[ECS_TABLE_VERSION_ARRAY_SIZE];
+
     /* Array for checking if components can be looked up trivially */
     bool non_fragmenting[FLECS_HI_COMPONENT_ID];
 
@@ -160,7 +163,10 @@ struct ecs_world_t {
     int32_t workers_waiting;         /* Number of workers waiting on sync */
     ecs_pipeline_state_t* pq;        /* Pointer to the pipeline for the workers to execute */
     bool workers_use_task_api;       /* Workers are short-lived tasks, not long-running threads */
+
+    /* -- Exclusive access */
     ecs_os_thread_id_t exclusive_access; /* If set, world can only be mutated by thread */
+    const char *exclusive_thread_name;   /* Name of thread with exclusive access (used for debugging) */
 
     /* -- Time management -- */
     ecs_time_t world_start_time;     /* Timestamp of simulation start */
@@ -261,8 +267,18 @@ void flecs_increment_table_version(
     ecs_world_t *world,
     ecs_table_t *table);
 
+/* Same as flecs_increment_table_version, but for column version. */
+void flecs_increment_table_column_version(
+    ecs_world_t *world,
+    ecs_table_t *table);
+
 /* Get table version. */
 uint32_t flecs_get_table_version_fast(
+    const ecs_world_t *world,
+    const uint64_t table_id);
+
+/* Get table version for column pointer validation. */
+uint32_t flecs_get_table_column_version(
     const ecs_world_t *world,
     const uint64_t table_id);
 

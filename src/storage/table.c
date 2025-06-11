@@ -31,7 +31,6 @@
 #ifdef FLECS_SANITIZE
 static
 void flecs_table_check_sanity(
-    ecs_world_t *world,
     ecs_table_t *table) 
 {
     int32_t i, count = ecs_table_count(table);
@@ -91,7 +90,7 @@ void flecs_table_check_sanity(
         (table->flags & EcsTableHasTraversable), ECS_INTERNAL_ERROR, NULL);
 }
 #else
-#define flecs_table_check_sanity(world, table)
+#define flecs_table_check_sanity(table)
 #endif
 
 /* Set flags for type hooks so table operations can quickly check whether a
@@ -1404,6 +1403,9 @@ int32_t flecs_table_grow_data(
     /* If the table is monitored indicate that there has been a change */
     flecs_table_mark_table_dirty(world, table, 0);
 
+    /* Mark columns as potentially reallocated */
+    flecs_increment_table_column_version(world, table);
+
     /* Return index of first added entity */
     return count;
 }
@@ -1437,7 +1439,7 @@ int32_t flecs_table_append(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     /* Get count & size before growing entities array. This tells us whether the
      * arrays will realloc */
@@ -1456,6 +1458,7 @@ int32_t flecs_table_append(
  
     /* If the table is monitored indicate that there has been a change */
     flecs_table_mark_table_dirty(world, table, 0);
+    flecs_increment_table_column_version(world, table);
     ecs_assert(count >= 0, ECS_INTERNAL_ERROR, NULL);
 
     /* Fast path: no switch columns, no lifecycle actions */
@@ -1510,7 +1513,7 @@ int32_t flecs_table_append(
         flecs_bitset_addn(bs, 1);
     }
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     return count;
 }
@@ -1543,7 +1546,7 @@ void flecs_table_delete(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     int32_t count = ecs_table_count(table);
     ecs_assert(count > 0, ECS_INTERNAL_ERROR, NULL);
@@ -1568,7 +1571,7 @@ void flecs_table_delete(
     }     
 
     /* If the table is monitored indicate that there has been a change */
-    flecs_table_mark_table_dirty(world, table, 0);    
+    flecs_table_mark_table_dirty(world, table, 0);
 
     /* Destruct component data */
     ecs_column_t *columns = table->data.columns;
@@ -1584,7 +1587,7 @@ void flecs_table_delete(
 
         table->data.count --;
 
-        flecs_table_check_sanity(world, table);
+        flecs_table_check_sanity(table);
         return;
     }
 
@@ -1647,7 +1650,7 @@ void flecs_table_delete(
 
     table->data.count --;
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 }
 
 /* Move operation for tables that don't have any complex logic */
@@ -1701,13 +1704,13 @@ void flecs_table_move(
     ecs_assert(src_index >= 0, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(dst_index >= 0, ECS_INTERNAL_ERROR, NULL);
 
-    flecs_table_check_sanity(world, dst_table);
-    flecs_table_check_sanity(world, src_table);
+    flecs_table_check_sanity(dst_table);
+    flecs_table_check_sanity(src_table);
 
     if (!((dst_table->flags | src_table->flags) & EcsTableIsComplex)) {
         flecs_table_fast_move(dst_table, dst_index, src_table, src_index);
-        flecs_table_check_sanity(world, dst_table);
-        flecs_table_check_sanity(world, src_table);
+        flecs_table_check_sanity(dst_table);
+        flecs_table_check_sanity(src_table);
         return;
     }
 
@@ -1777,8 +1780,8 @@ void flecs_table_move(
             &src_entity, src_index, 1, use_move_dtor);
     }
 
-    flecs_table_check_sanity(world, dst_table);
-    flecs_table_check_sanity(world, src_table);
+    flecs_table_check_sanity(dst_table);
+    flecs_table_check_sanity(src_table);
 }
 
 /* Append n entities to table */
@@ -1790,11 +1793,11 @@ int32_t flecs_table_appendn(
 {
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
     int32_t cur_count = ecs_table_count(table);
     int32_t result = flecs_table_grow_data(
         world, table, to_add, cur_count + to_add, ids);
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     return result;
 }
@@ -1808,7 +1811,7 @@ bool flecs_table_shrink(
     ecs_assert(!table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
     (void)world;
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 
     bool has_payload = table->data.entities != NULL;
     ecs_vec_t v_entities = ecs_vec_from_entities(table);
@@ -1827,7 +1830,9 @@ bool flecs_table_shrink(
     table->data.size = v_entities.size;
     table->data.entities = v_entities.array;
 
-    flecs_table_check_sanity(world, table);
+    flecs_increment_table_column_version(world, table);
+
+    flecs_table_check_sanity(table);
 
     return has_payload;
 }
@@ -1865,7 +1870,7 @@ void flecs_table_swap(
     ecs_assert(row_1 >= 0, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(row_2 >= 0, ECS_INTERNAL_ERROR, NULL);
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
     
     if (row_1 == row_2) {
         return;
@@ -1898,7 +1903,7 @@ void flecs_table_swap(
 
     ecs_column_t *columns = table->data.columns;
     if (!columns) {
-        flecs_table_check_sanity(world, table);
+        flecs_table_check_sanity(table);
         return;
     }
 
@@ -1938,7 +1943,7 @@ void flecs_table_swap(
         }
     }
 
-    flecs_table_check_sanity(world, table);
+    flecs_table_check_sanity(table);
 }
 
 static
@@ -2111,6 +2116,9 @@ void flecs_table_merge_data(
     /* Mark entity column as dirty */
     flecs_table_mark_table_dirty(world, dst_table, 0);
 
+    /* Mark columns as potentially reallocated */
+    flecs_increment_table_column_version(world, dst_table);
+
     dst_table->data.entities = dst_entities.array;
     dst_table->data.count = dst_entities.count;
     dst_table->data.size = dst_entities.size;
@@ -2133,8 +2141,8 @@ void flecs_table_merge(
     ecs_assert(!src_table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
     ecs_assert(!dst_table->_->lock, ECS_LOCKED_STORAGE, FLECS_LOCKED_STORAGE_MSG);
 
-    flecs_table_check_sanity(world, src_table);
-    flecs_table_check_sanity(world, dst_table);
+    flecs_table_check_sanity(src_table);
+    flecs_table_check_sanity(dst_table);
 
     const ecs_entity_t *src_entities = ecs_table_entities(src_table);
     int32_t src_count = ecs_table_count(src_table);
@@ -2158,8 +2166,8 @@ void flecs_table_merge(
         ecs_assert(src_table->_->traversable_count == 0, ECS_INTERNAL_ERROR, NULL);
     }
 
-    flecs_table_check_sanity(world, src_table);
-    flecs_table_check_sanity(world, dst_table);
+    flecs_table_check_sanity(src_table);
+    flecs_table_check_sanity(dst_table);
 }
 
 /* Internal mechanism for propagating information to tables */
