@@ -49,12 +49,42 @@ void Entity_get_generic_w_id(void);
 void Entity_get_generic_w_id_t(void);
 void Entity_ensure_generic_w_id(void);
 void Entity_ensure_generic_w_id_t(void);
+void Entity_get_w_id(void);
+void Entity_get_T(void);
+void Entity_get_r_t(void);
+void Entity_get_R_t(void);
+void Entity_get_R_T(void);
+void Entity_get_r_T(void);
+void Entity_get_w_id_not_found(void);
+void Entity_get_T_not_found(void);
+void Entity_get_r_t_not_found(void);
+void Entity_get_R_t_not_found(void);
+void Entity_get_R_T_not_found(void);
+void Entity_get_r_T_not_found(void);
+void Entity_try_get_w_id(void);
+void Entity_try_get_T(void);
+void Entity_try_get_r_t(void);
+void Entity_try_get_R_t(void);
+void Entity_try_get_R_T(void);
+void Entity_try_get_r_T(void);
 void Entity_get_mut_w_id(void);
 void Entity_get_mut_T(void);
 void Entity_get_mut_r_t(void);
 void Entity_get_mut_R_t(void);
 void Entity_get_mut_R_T(void);
 void Entity_get_mut_r_T(void);
+void Entity_get_mut_w_id_not_found(void);
+void Entity_get_mut_T_not_found(void);
+void Entity_get_mut_r_t_not_found(void);
+void Entity_get_mut_R_t_not_found(void);
+void Entity_get_mut_R_T_not_found(void);
+void Entity_get_mut_r_T_not_found(void);
+void Entity_try_get_mut_w_id(void);
+void Entity_try_get_mut_T(void);
+void Entity_try_get_mut_r_t(void);
+void Entity_try_get_mut_R_t(void);
+void Entity_try_get_mut_R_T(void);
+void Entity_try_get_mut_r_T(void);
 void Entity_set_generic(void);
 void Entity_set_generic_w_id(void);
 void Entity_set_generic_w_id_t(void);
@@ -211,6 +241,9 @@ void Entity_is_a(void);
 void Entity_is_a_w_type(void);
 void Entity_child_of(void);
 void Entity_child_of_w_type(void);
+void Entity_child(void);
+void Entity_child_custom_rel(void);
+void Entity_child_custom_type(void);
 void Entity_slot_of(void);
 void Entity_slot_of_w_type(void);
 void Entity_slot(void);
@@ -392,7 +425,7 @@ void Enum_add_enum_class_constant(void);
 void Enum_replace_enum_constants(void);
 void Enum_has_enum(void);
 void Enum_has_enum_wildcard(void);
-void Enum_get_enum(void);
+void Enum_get_constant(void);
 void Enum_remove_enum(void);
 void Enum_remove_wildcard(void);
 void Enum_enum_as_component(void);
@@ -1334,6 +1367,34 @@ void Singleton_add_remove_singleton_pair_R_t(void);
 void Singleton_add_remove_singleton_pair_r_t(void);
 void Singleton_get_target(void);
 void Singleton_singleton_enum(void);
+void Singleton_get_w_id(void);
+void Singleton_get_T(void);
+void Singleton_get_r_t(void);
+void Singleton_get_R_t(void);
+void Singleton_get_R_T(void);
+void Singleton_get_w_id_not_found(void);
+void Singleton_get_T_not_found(void);
+void Singleton_get_r_t_not_found(void);
+void Singleton_get_R_t_not_found(void);
+void Singleton_get_R_T_not_found(void);
+void Singleton_try_get_w_id(void);
+void Singleton_try_get_T(void);
+void Singleton_try_get_R_t(void);
+void Singleton_try_get_R_T(void);
+void Singleton_get_mut_w_id(void);
+void Singleton_get_mut_T(void);
+void Singleton_get_mut_R_t(void);
+void Singleton_get_mut_R_T(void);
+void Singleton_get_mut_w_id_not_found(void);
+void Singleton_get_mut_T_not_found(void);
+void Singleton_get_mut_r_t_not_found(void);
+void Singleton_get_mut_R_t_not_found(void);
+void Singleton_get_mut_R_T_not_found(void);
+void Singleton_try_get_mut_w_id(void);
+void Singleton_try_get_mut_T(void);
+void Singleton_try_get_mut_r_t(void);
+void Singleton_try_get_mut_R_t(void);
+void Singleton_try_get_mut_R_T(void);
 
 // Testsuite 'Misc'
 void Misc_setup(void);
@@ -1662,6 +1723,78 @@ bake_test_case Entity_testcases[] = {
         Entity_ensure_generic_w_id_t
     },
     {
+        "get_w_id",
+        Entity_get_w_id
+    },
+    {
+        "get_T",
+        Entity_get_T
+    },
+    {
+        "get_r_t",
+        Entity_get_r_t
+    },
+    {
+        "get_R_t",
+        Entity_get_R_t
+    },
+    {
+        "get_R_T",
+        Entity_get_R_T
+    },
+    {
+        "get_r_T",
+        Entity_get_r_T
+    },
+    {
+        "get_w_id_not_found",
+        Entity_get_w_id_not_found
+    },
+    {
+        "get_T_not_found",
+        Entity_get_T_not_found
+    },
+    {
+        "get_r_t_not_found",
+        Entity_get_r_t_not_found
+    },
+    {
+        "get_R_t_not_found",
+        Entity_get_R_t_not_found
+    },
+    {
+        "get_R_T_not_found",
+        Entity_get_R_T_not_found
+    },
+    {
+        "get_r_T_not_found",
+        Entity_get_r_T_not_found
+    },
+    {
+        "try_get_w_id",
+        Entity_try_get_w_id
+    },
+    {
+        "try_get_T",
+        Entity_try_get_T
+    },
+    {
+        "try_get_r_t",
+        Entity_try_get_r_t
+    },
+    {
+        "try_get_R_t",
+        Entity_try_get_R_t
+    },
+    {
+        "try_get_R_T",
+        Entity_try_get_R_T
+    },
+    {
+        "try_get_r_T",
+        Entity_try_get_r_T
+    },
+    {
         "get_mut_w_id",
         Entity_get_mut_w_id
     },
@@ -1684,6 +1817,54 @@ bake_test_case Entity_testcases[] = {
     {
         "get_mut_r_T",
         Entity_get_mut_r_T
+    },
+    {
+        "get_mut_w_id_not_found",
+        Entity_get_mut_w_id_not_found
+    },
+    {
+        "get_mut_T_not_found",
+        Entity_get_mut_T_not_found
+    },
+    {
+        "get_mut_r_t_not_found",
+        Entity_get_mut_r_t_not_found
+    },
+    {
+        "get_mut_R_t_not_found",
+        Entity_get_mut_R_t_not_found
+    },
+    {
+        "get_mut_R_T_not_found",
+        Entity_get_mut_R_T_not_found
+    },
+    {
+        "get_mut_r_T_not_found",
+        Entity_get_mut_r_T_not_found
+    },
+    {
+        "try_get_mut_w_id",
+        Entity_try_get_mut_w_id
+    },
+    {
+        "try_get_mut_T",
+        Entity_try_get_mut_T
+    },
+    {
+        "try_get_mut_r_t",
+        Entity_try_get_mut_r_t
+    },
+    {
+        "try_get_mut_R_t",
+        Entity_try_get_mut_R_t
+    },
+    {
+        "try_get_mut_R_T",
+        Entity_try_get_mut_R_T
+    },
+    {
+        "try_get_mut_r_T",
+        Entity_try_get_mut_r_T
     },
     {
         "set_generic",
@@ -2308,6 +2489,18 @@ bake_test_case Entity_testcases[] = {
     {
         "child_of_w_type",
         Entity_child_of_w_type
+    },
+    {
+        "child",
+        Entity_child
+    },
+    {
+        "child_custom_rel",
+        Entity_child_custom_rel
+    },
+    {
+        "child_custom_type",
+        Entity_child_custom_type
     },
     {
         "slot_of",
@@ -3019,8 +3212,8 @@ bake_test_case Enum_testcases[] = {
         Enum_has_enum_wildcard
     },
     {
-        "get_enum",
-        Enum_get_enum
+        "get_constant",
+        Enum_get_constant
     },
     {
         "remove_enum",
@@ -6701,6 +6894,118 @@ bake_test_case Singleton_testcases[] = {
     {
         "singleton_enum",
         Singleton_singleton_enum
+    },
+    {
+        "get_w_id",
+        Singleton_get_w_id
+    },
+    {
+        "get_T",
+        Singleton_get_T
+    },
+    {
+        "get_r_t",
+        Singleton_get_r_t
+    },
+    {
+        "get_R_t",
+        Singleton_get_R_t
+    },
+    {
+        "get_R_T",
+        Singleton_get_R_T
+    },
+    {
+        "get_w_id_not_found",
+        Singleton_get_w_id_not_found
+    },
+    {
+        "get_T_not_found",
+        Singleton_get_T_not_found
+    },
+    {
+        "get_r_t_not_found",
+        Singleton_get_r_t_not_found
+    },
+    {
+        "get_R_t_not_found",
+        Singleton_get_R_t_not_found
+    },
+    {
+        "get_R_T_not_found",
+        Singleton_get_R_T_not_found
+    },
+    {
+        "try_get_w_id",
+        Singleton_try_get_w_id
+    },
+    {
+        "try_get_T",
+        Singleton_try_get_T
+    },
+    {
+        "try_get_R_t",
+        Singleton_try_get_R_t
+    },
+    {
+        "try_get_R_T",
+        Singleton_try_get_R_T
+    },
+    {
+        "get_mut_w_id",
+        Singleton_get_mut_w_id
+    },
+    {
+        "get_mut_T",
+        Singleton_get_mut_T
+    },
+    {
+        "get_mut_R_t",
+        Singleton_get_mut_R_t
+    },
+    {
+        "get_mut_R_T",
+        Singleton_get_mut_R_T
+    },
+    {
+        "get_mut_w_id_not_found",
+        Singleton_get_mut_w_id_not_found
+    },
+    {
+        "get_mut_T_not_found",
+        Singleton_get_mut_T_not_found
+    },
+    {
+        "get_mut_r_t_not_found",
+        Singleton_get_mut_r_t_not_found
+    },
+    {
+        "get_mut_R_t_not_found",
+        Singleton_get_mut_R_t_not_found
+    },
+    {
+        "get_mut_R_T_not_found",
+        Singleton_get_mut_R_T_not_found
+    },
+    {
+        "try_get_mut_w_id",
+        Singleton_try_get_mut_w_id
+    },
+    {
+        "try_get_mut_T",
+        Singleton_try_get_mut_T
+    },
+    {
+        "try_get_mut_r_t",
+        Singleton_try_get_mut_r_t
+    },
+    {
+        "try_get_mut_R_t",
+        Singleton_try_get_mut_R_t
+    },
+    {
+        "try_get_mut_R_T",
+        Singleton_try_get_mut_R_T
     }
 };
 
@@ -7377,7 +7682,7 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        284,
+        317,
         Entity_testcases
     },
     {
@@ -7512,7 +7817,7 @@ static bake_test_suite suites[] = {
         "Singleton",
         NULL,
         NULL,
-        21,
+        49,
         Singleton_testcases
     },
     {

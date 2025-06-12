@@ -12636,7 +12636,7 @@ bool ecs_iter_var_is_constrained(
 }
 
 uint64_t ecs_iter_get_group(
-    ecs_iter_t *it)
+    const ecs_iter_t *it)
 {
     ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
 
@@ -12646,7 +12646,7 @@ uint64_t ecs_iter_get_group(
 
     ecs_check(it->query != NULL, ECS_INVALID_PARAMETER, 
         "ecs_iter_get_group must be called on iterator that iterates a query");
-    ecs_query_iter_t *qit = &it->priv_.iter.query;
+    const ecs_query_iter_t *qit = &it->priv_.iter.query;
     ecs_check(qit->group != NULL, ECS_INVALID_PARAMETER,
         "ecs_iter_get_group must be called on iterator that iterates a cached "
         "query (query is uncached)");
@@ -36617,6 +36617,8 @@ int flecs_query_finalize_terms(
         {
             ECS_BIT_SET(q->flags, EcsQueryMatchOnlySelf);
 
+            bool is_trivial = true;
+
             for (i = 0; i < term_count; i ++) {
                 ecs_term_t *term = &terms[i];
                 ecs_term_ref_t *src = &term->src;
@@ -36626,7 +36628,8 @@ int flecs_query_finalize_terms(
                 }
 
                 if (!(term->flags_ & EcsTermIsTrivial)) {
-                    break;
+                    is_trivial = false;
+                    continue;
                 }
 
                 if ((term->src.id & EcsTraverseFlags) == EcsSelf) {
@@ -36638,7 +36641,7 @@ int flecs_query_finalize_terms(
                 }
             }
 
-            if (term_count && (i == term_count)) {
+            if (term_count && is_trivial) {
                 ECS_BIT_SET(q->flags, EcsQueryIsTrivial);
             }
         }
@@ -37047,6 +37050,7 @@ int flecs_query_finalize_query(
     #ifndef FLECS_SANITIZE
 done:
     #endif
+
     flecs_query_copy_arrays(q);
     return 0;
 error:
@@ -72116,7 +72120,7 @@ void flecs_query_cache_match_set(
         qm->_up_fields = it->up_fields;
     } else {
         /* If this is a trivial cache, we shouldn't have any fields with 
-        * non-$this sources */
+         * non-$this sources */
         ecs_assert(i == field_count, ECS_INTERNAL_ERROR, NULL);
     }
 }
