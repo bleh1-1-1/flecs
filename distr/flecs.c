@@ -57829,7 +57829,6 @@ const char* flecs_tokenizer_identifier(
         out->value = parser->token_cur;
     }
 
-    ecs_assert(flecs_script_is_identifier(pos[0]), ECS_INTERNAL_ERROR, NULL);
     bool is_var = pos[0] == '$';
     char *outpos = NULL;
     const char *start = pos;
@@ -57838,6 +57837,16 @@ const char* flecs_tokenizer_identifier(
         if (parser->merge_variable_members) {
             is_var = false;
         }
+    }
+
+    const char *name = parser ? parser->name : NULL;
+    const char *code = parser ? parser->code : pos;
+
+    if (!flecs_script_is_identifier(pos[0])) {
+        ecs_parser_error(name, code, pos - code,
+            "invalid start of identifier '%c'",
+                pos[0]);
+        return NULL;
     }
 
     do {
@@ -57873,9 +57882,7 @@ const char* flecs_tokenizer_identifier(
                     } else if (c == '>') {
                         indent --;
                     } else if (!c) {
-                        ecs_parser_error(parser->name, 
-                            parser->code, 
-                                pos - parser->code, 
+                        ecs_parser_error(name, code, pos - code, 
                                     "< without > in identifier");
                         return NULL;
                     }
@@ -57897,10 +57904,8 @@ const char* flecs_tokenizer_identifier(
                 }
                 return pos;
             } else if (c == '>') {
-                ecs_parser_error(parser->name, 
-                    parser->code,
-                        pos - parser->code, 
-                            "> without < in identifier");
+                ecs_parser_error(name, code, pos - code, 
+                    "> without < in identifier");
                 return NULL;
             } else {
                 if (outpos && parser) {
@@ -66811,6 +66816,7 @@ int flecs_script_eval_for_range(
     for (i = from; i < to; i ++) {
         *(int32_t*)var->value.ptr = i;
         if (flecs_script_eval_scope(v, node->scope)) {
+            v->vars = ecs_script_vars_pop(v->vars);
             return -1;
         }
     }
@@ -67497,7 +67503,9 @@ void flecs_script_for_range_to_str(
 {
     flecs_scriptbuf_node(v, &node->node);
     flecs_scriptbuf_appendstr(v, node->loop_var);
-    flecs_scriptbuf_appendstr(v, " ");
+    flecs_script_color_to_str(v, ECS_BLUE);
+    flecs_scriptbuf_appendstr(v, " in ");
+    flecs_script_color_to_str(v, ECS_NORMAL);
     flecs_expr_to_str(v, node->from);
     flecs_scriptbuf_appendstr(v, " .. ");
     flecs_expr_to_str(v, node->to);
@@ -84090,7 +84098,7 @@ int flecs_expr_interpolated_string_visit_fold(
         (ecs_expr_interpolated_string_t*)*node_ptr;
 
     bool can_fold = true;
-    
+
     int32_t i, e = 0, count = ecs_vec_count(&node->fragments);
     char **fragments = ecs_vec_first(&node->fragments);
     for (i = 0; i < count; i ++) {
@@ -85821,6 +85829,8 @@ int flecs_expr_interpolated_string_visit_type(
                 if (!ptr) {
                     goto error;
                 }
+
+                impl->token_remaining = parser.token_cur;
 
                 if (ptr[0] != '}') {
                     flecs_expr_visit_error(script, node,
