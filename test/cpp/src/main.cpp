@@ -91,6 +91,24 @@ void Entity_set_generic_w_id_t(void);
 void Entity_set_generic_no_size(void);
 void Entity_set_generic_no_size_w_id(void);
 void Entity_set_generic_no_size_w_id_t(void);
+void Entity_set_T(void);
+void Entity_set_R_t(void);
+void Entity_set_R_T(void);
+void Entity_set_r_T(void);
+void Entity_assign_T(void);
+void Entity_assign_R_t(void);
+void Entity_assign_R_T(void);
+void Entity_assign_r_T(void);
+void Entity_assign_T_not_found(void);
+void Entity_assign_R_t_not_found(void);
+void Entity_assign_R_T_not_found(void);
+void Entity_assign_r_T_not_found(void);
+void Entity_assign_w_on_set_hook(void);
+void Entity_assign_w_on_set_observer(void);
+void Entity_assign_w_change_detect(void);
+void Entity_defer_assign_w_on_set_hook(void);
+void Entity_defer_assign_w_on_set_observer(void);
+void Entity_defer_assign_w_change_detect(void);
 void Entity_add_role(void);
 void Entity_remove_role(void);
 void Entity_has_role(void);
@@ -1179,6 +1197,8 @@ void Module_rename_reparent_root_module(void);
 void Module_no_recycle_after_rename_reparent(void);
 void Module_reimport_after_delete(void);
 void Module_component_name_w_module_name(void);
+void Module_delete_module_w_implicit_component_and_system(void);
+void Module_delete_module_w_explicit_component_and_system(void);
 
 // Testsuite 'ImplicitComponents'
 void ImplicitComponents_add(void);
@@ -1889,6 +1909,78 @@ bake_test_case Entity_testcases[] = {
     {
         "set_generic_no_size_w_id_t",
         Entity_set_generic_no_size_w_id_t
+    },
+    {
+        "set_T",
+        Entity_set_T
+    },
+    {
+        "set_R_t",
+        Entity_set_R_t
+    },
+    {
+        "set_R_T",
+        Entity_set_R_T
+    },
+    {
+        "set_r_T",
+        Entity_set_r_T
+    },
+    {
+        "assign_T",
+        Entity_assign_T
+    },
+    {
+        "assign_R_t",
+        Entity_assign_R_t
+    },
+    {
+        "assign_R_T",
+        Entity_assign_R_T
+    },
+    {
+        "assign_r_T",
+        Entity_assign_r_T
+    },
+    {
+        "assign_T_not_found",
+        Entity_assign_T_not_found
+    },
+    {
+        "assign_R_t_not_found",
+        Entity_assign_R_t_not_found
+    },
+    {
+        "assign_R_T_not_found",
+        Entity_assign_R_T_not_found
+    },
+    {
+        "assign_r_T_not_found",
+        Entity_assign_r_T_not_found
+    },
+    {
+        "assign_w_on_set_hook",
+        Entity_assign_w_on_set_hook
+    },
+    {
+        "assign_w_on_set_observer",
+        Entity_assign_w_on_set_observer
+    },
+    {
+        "assign_w_change_detect",
+        Entity_assign_w_change_detect
+    },
+    {
+        "defer_assign_w_on_set_hook",
+        Entity_defer_assign_w_on_set_hook
+    },
+    {
+        "defer_assign_w_on_set_observer",
+        Entity_defer_assign_w_on_set_observer
+    },
+    {
+        "defer_assign_w_change_detect",
+        Entity_defer_assign_w_change_detect
     },
     {
         "add_role",
@@ -6162,6 +6254,14 @@ bake_test_case Module_testcases[] = {
     {
         "component_name_w_module_name",
         Module_component_name_w_module_name
+    },
+    {
+        "delete_module_w_implicit_component_and_system",
+        Module_delete_module_w_implicit_component_and_system
+    },
+    {
+        "delete_module_w_explicit_component_and_system",
+        Module_delete_module_w_explicit_component_and_system
     }
 };
 
@@ -7682,7 +7782,7 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        317,
+        335,
         Entity_testcases
     },
     {
@@ -7789,7 +7889,7 @@ static bake_test_suite suites[] = {
         "Module",
         NULL,
         NULL,
-        24,
+        26,
         Module_testcases
     },
     {

@@ -110,6 +110,15 @@ extern "C" {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+//// Bits set in world->non_trivial array
+////////////////////////////////////////////////////////////////////////////////
+
+#define EcsNonTrivialIdSparse          (1u << 0)
+#define EcsNonTrivialIdNonFragmenting  (1u << 1)
+#define EcsNonTrivialIdInherit         (1u << 2)
+
+
+////////////////////////////////////////////////////////////////////////////////
 //// Iterator flags (used by ecs_iter_t::flags)
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -202,7 +211,7 @@ extern "C" {
 #define EcsObserverBypassQuery         (1u << 7u)  /* Don't evaluate query for multi-component observer*/
 #define EcsObserverYieldOnCreate       (1u << 8u)  /* Yield matching entities when creating observer */
 #define EcsObserverYieldOnDelete       (1u << 9u)  /* Yield matching entities when deleting observer */
-
+#define EcsObserverKeepAlive           (1u << 11u) /* Observer keeps component alive (same value as EcsTermKeepAlive) */
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Table flags (used by ecs_table_t::flags)

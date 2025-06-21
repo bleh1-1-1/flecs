@@ -1772,13 +1772,6 @@ error:
         ecs_column_t *column = &table->data.columns[column_index - 1];\
         return ECS_ELEM(column->data, column->ti->size, \
             ECS_RECORD_TO_ROW(r->row));\
-    } else if (column_index < 0) {\
-        column_index = flecs_ito(int16_t, -column_index - 1);\
-        const ecs_table_record_t *tr = &table->_->records[column_index];\
-        ecs_component_record_t *cr = (ecs_component_record_t*)tr->hdr.cache;\
-        if (cr->flags & EcsIdIsSparse) {\
-            return flecs_component_sparse_get(cr, entity);\
-        }\
     }
 
 const void* ecs_get_id(
@@ -1798,11 +1791,9 @@ const void* ecs_get_id(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
     if (id < FLECS_HI_COMPONENT_ID) {
-        ecs_get_low_id(table, r, id);
-        if (!world->non_fragmenting[id]) {
-            if (!(table->flags & EcsTableHasIsA)) {
-                return NULL;
-            }
+        if (!world->non_trivial[id]) {
+            ecs_get_low_id(table, r, id);
+            return NULL;
         }
     }
 
@@ -1850,7 +1841,7 @@ void* ecs_get_mut_id(
     ecs_assert(r != NULL, ECS_INVALID_PARAMETER, NULL);
 
     if (id < FLECS_HI_COMPONENT_ID) {
-        if (!world->non_fragmenting[id]) {
+        if (!world->non_trivial[id]) {
             ecs_get_low_id(r->table, r, id);
             return NULL;
         }
@@ -1902,6 +1893,23 @@ void* ecs_ensure_modified_id(
     ecs_check(flecs_defer_cmd(stage), ECS_INVALID_PARAMETER, NULL);
 
     return flecs_defer_set(world, stage, EcsCmdSet, entity, id, 0, NULL, NULL);
+error:
+    return NULL;
+}
+
+void* ecs_get_mut_modified_id(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_id_t id)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_is_alive(world, entity), ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_id_is_valid(world, id), ECS_INVALID_PARAMETER, NULL);
+
+    ecs_stage_t *stage = flecs_stage_from_world(&world);
+    ecs_check(flecs_defer_cmd(stage), ECS_INVALID_PARAMETER, NULL);
+
+    return flecs_defer_assign(world, stage, entity, id);
 error:
     return NULL;
 }
@@ -2369,13 +2377,8 @@ bool ecs_has_id(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
     if (id < FLECS_HI_COMPONENT_ID) {
-        if (table->component_map[id] != 0) {
-            return true;
-        }
-        if (!world->non_fragmenting[id]) {
-            if (!(table->flags & EcsTableHasIsA)) {
-                return false;
-            }
+        if (!world->non_trivial[id]) {
+            return table->component_map[id] != 0;
         }
     }
 
@@ -2446,11 +2449,8 @@ bool ecs_owns_id(
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
     if (id < FLECS_HI_COMPONENT_ID) {
-        if (table->component_map[id]) {
-            return true;
-        }
-        if (!world->non_fragmenting[id]) {
-            return false;
+        if (!world->non_trivial[id]) {
+            return table->component_map[id];
         }
     }
 

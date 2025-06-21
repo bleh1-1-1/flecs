@@ -3297,6 +3297,23 @@ void* ecs_ensure_modified_id(
     ecs_entity_t entity,
     ecs_id_t id);
 
+/** Combines get_mut + modified in single operation.
+ * This operation is a more efficient alternative to calling ecs_get_mut_id() and
+ * ecs_modified_id() separately. This operation is only valid when the world is in
+ * deferred mode, which ensures that the Modified event is not emitted before
+ * the modification takes place.
+ *
+ * @param world The world.
+ * @param entity The entity.
+ * @param id The id of the component to obtain.
+ * @return The component pointer.
+ */
+FLECS_API
+void* ecs_get_mut_modified_id(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_id_t id);
+
 /** Create a component ref.
  * A ref is a handle to an entity + component which caches a small amount of
  * data to reduce overhead of repeatedly accessing the component. Use
@@ -4989,8 +5006,9 @@ const ecs_query_group_info_t* ecs_query_get_group_info(
 typedef struct ecs_query_count_t {
     int32_t results;      /**< Number of results returned by query. */
     int32_t entities;     /**< Number of entities returned by query. */
-    int32_t tables;       /**< Number of tables returned by query. */
-    int32_t empty_tables; /**< Number of empty tables returned by query. */
+    int32_t tables;       /**< Number of tables returned by query. Only set for
+                             * queries for which the table count can be reliably
+                             * determined. */
 } ecs_query_count_t;
 
 /** Returns number of entities and results the query matches with.

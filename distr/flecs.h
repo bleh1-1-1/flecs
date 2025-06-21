@@ -466,6 +466,15 @@ extern "C" {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+//// Bits set in world->non_trivial array
+////////////////////////////////////////////////////////////////////////////////
+
+#define EcsNonTrivialIdSparse          (1u << 0)
+#define EcsNonTrivialIdNonFragmenting  (1u << 1)
+#define EcsNonTrivialIdInherit         (1u << 2)
+
+
+////////////////////////////////////////////////////////////////////////////////
 //// Iterator flags (used by ecs_iter_t::flags)
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -558,7 +567,7 @@ extern "C" {
 #define EcsObserverBypassQuery         (1u << 7u)  /* Don't evaluate query for multi-component observer*/
 #define EcsObserverYieldOnCreate       (1u << 8u)  /* Yield matching entities when creating observer */
 #define EcsObserverYieldOnDelete       (1u << 9u)  /* Yield matching entities when deleting observer */
-
+#define EcsObserverKeepAlive           (1u << 11u) /* Observer keeps component alive (same value as EcsTermKeepAlive) */
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Table flags (used by ecs_table_t::flags)
@@ -7106,6 +7115,23 @@ void* ecs_ensure_modified_id(
     ecs_entity_t entity,
     ecs_id_t id);
 
+/** Combines get_mut + modified in single operation.
+ * This operation is a more efficient alternative to calling ecs_get_mut_id() and
+ * ecs_modified_id() separately. This operation is only valid when the world is in
+ * deferred mode, which ensures that the Modified event is not emitted before
+ * the modification takes place.
+ *
+ * @param world The world.
+ * @param entity The entity.
+ * @param id The id of the component to obtain.
+ * @return The component pointer.
+ */
+FLECS_API
+void* ecs_get_mut_modified_id(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_id_t id);
+
 /** Create a component ref.
  * A ref is a handle to an entity + component which caches a small amount of
  * data to reduce overhead of repeatedly accessing the component. Use
@@ -8798,8 +8824,9 @@ const ecs_query_group_info_t* ecs_query_get_group_info(
 typedef struct ecs_query_count_t {
     int32_t results;      /**< Number of results returned by query. */
     int32_t entities;     /**< Number of entities returned by query. */
-    int32_t tables;       /**< Number of tables returned by query. */
-    int32_t empty_tables; /**< Number of empty tables returned by query. */
+    int32_t tables;       /**< Number of tables returned by query. Only set for
+                             * queries for which the table count can be reliably
+                             * determined. */
 } ecs_query_count_t;
 
 /** Returns number of entities and results the query matches with.
@@ -21758,42 +21785,8 @@ namespace flecs
 
 /* Static helper functions to assign a component value */
 
-// set(T&&), T = constructible
-template <typename T, if_t< is_flecs_constructible<T>::value > = 0>
-inline void set(world_t *world, flecs::entity_t entity, T&& value, flecs::id_t id) {
-    ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
-            "operation invalid for empty type");
-
-    if (!ecs_is_deferred(world)) {
-        T& dst = *static_cast<T*>(ecs_ensure_id(world, entity, id));
-        dst = FLECS_MOV(value);
-
-        ecs_modified_id(world, entity, id);
-    } else {
-        T& dst = *static_cast<T*>(ecs_ensure_modified_id(world, entity, id));
-        dst = FLECS_MOV(value);
-    }
-}
-
-// set(const T&), T = constructible
-template <typename T, if_t< is_flecs_constructible<T>::value > = 0>
-inline void set(world_t *world, flecs::entity_t entity, const T& value, flecs::id_t id) {
-    ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
-            "operation invalid for empty type");
-
-    if (!ecs_is_deferred(world)) {
-        T& dst = *static_cast<T*>(ecs_ensure_id(world, entity, id));
-        dst = FLECS_MOV(value);
-
-        ecs_modified_id(world, entity, id);
-    } else {
-        T& dst = *static_cast<T*>(ecs_ensure_modified_id(world, entity, id));
-        dst = FLECS_MOV(value);
-    }
-}
-
 // set(T&&), T = not constructible
-template <typename T, if_not_t< is_flecs_constructible<T>::value > = 0>
+template <typename T>
 inline void set(world_t *world, flecs::entity_t entity, T&& value, flecs::id_t id) {
     ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
             "operation invalid for empty type");
@@ -21810,7 +21803,7 @@ inline void set(world_t *world, flecs::entity_t entity, T&& value, flecs::id_t i
 }
 
 // set(const T&), T = not constructible
-template <typename T, if_not_t< is_flecs_constructible<T>::value > = 0>
+template <typename T>
 inline void set(world_t *world, flecs::entity_t entity, const T& value, flecs::id_t id) {
     ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
             "operation invalid for empty type");
@@ -21826,20 +21819,6 @@ inline void set(world_t *world, flecs::entity_t entity, const T& value, flecs::i
     }
 }
 
-// emplace for T(Args...)
-template <typename T, typename ... Args, if_t<
-    std::is_constructible<actual_type_t<T>, Args...>::value ||
-    std::is_default_constructible<actual_type_t<T>>::value > = 0>
-inline void emplace(world_t *world, flecs::entity_t entity, flecs::id_t id, Args&&... args) {
-    ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
-            "operation invalid for empty type");
-    T& dst = *static_cast<T*>(ecs_emplace_id(world, entity, id, nullptr));
-
-    FLECS_PLACEMENT_NEW(&dst, T{FLECS_FWD(args)...});
-
-    ecs_modified_id(world, entity, id);
-}
-
 // set(T&&)
 template <typename T, typename A>
 inline void set(world_t *world, entity_t entity, A&& value) {
@@ -21852,6 +21831,89 @@ template <typename T, typename A>
 inline void set(world_t *world, entity_t entity, const A& value) {
     id_t id = _::type<T>::id(world);
     flecs::set(world, entity, value, id);
+}
+
+// set(T&&), T = not constructible
+template <typename T>
+inline void assign(world_t *world, flecs::entity_t entity, T&& value, flecs::id_t id) {
+    using ActualType = remove_reference_t<T>;
+
+    ecs_assert(_::type<ActualType>::size() != 0, ECS_INVALID_PARAMETER,
+            "operation invalid for empty type");
+
+    if (!ecs_is_deferred(world)) {
+        ActualType *dst_ptr = static_cast<ActualType*>(ecs_get_mut_id(world, entity, id));
+        ecs_assert(dst_ptr != nullptr, ECS_INVALID_OPERATION, 
+            "entity does not have component, use set() instead");
+        
+        ActualType& dst = *dst_ptr;
+        dst = FLECS_MOV(value);
+
+        ecs_modified_id(world, entity, id);
+    } else {
+        ActualType *dst_ptr = static_cast<ActualType*>(ecs_get_mut_modified_id(world, entity, id));
+        ecs_assert(dst_ptr != nullptr, ECS_INVALID_OPERATION, 
+            "entity does not have component, use set() instead");
+        
+        ActualType& dst = *dst_ptr;
+        dst = FLECS_MOV(value);
+    }
+}
+
+// set(const T&), T = not constructible
+template <typename T>
+inline void assign(world_t *world, flecs::entity_t entity, const T& value, flecs::id_t id) {
+    using ActualType = remove_reference_t<T>;
+
+    ecs_assert(_::type<ActualType>::size() != 0, ECS_INVALID_PARAMETER,
+            "operation invalid for empty type");
+
+    if (!ecs_is_deferred(world)) {
+        ActualType *dst_ptr = static_cast<ActualType*>(ecs_get_mut_id(world, entity, id));
+        ecs_assert(dst_ptr != nullptr, ECS_INVALID_OPERATION, 
+            "entity does not have component, use set() instead");
+        
+        ActualType& dst = *dst_ptr;
+        dst = FLECS_MOV(value);
+
+        ecs_modified_id(world, entity, id);
+    } else {
+        ActualType *dst_ptr = static_cast<ActualType*>(ecs_get_mut_modified_id(world, entity, id));
+        ecs_assert(dst_ptr != nullptr, ECS_INVALID_OPERATION, 
+            "entity does not have component, use set() instead");
+        
+        ActualType& dst = *dst_ptr;
+        dst = FLECS_MOV(value);
+    }
+}
+
+// set(T&&)
+template <typename T, typename A>
+inline void assign(world_t *world, entity_t entity, A&& value) {
+    id_t id = _::type<T>::id(world);
+    flecs::assign(world, entity, FLECS_FWD(value), id);
+}
+
+// set(const T&)
+template <typename T, typename A>
+inline void assign(world_t *world, entity_t entity, const A& value) {
+    id_t id = _::type<T>::id(world);
+    flecs::assign(world, entity, value, id);
+}
+
+
+// emplace for T(Args...)
+template <typename T, typename ... Args, if_t<
+    std::is_constructible<actual_type_t<T>, Args...>::value ||
+    std::is_default_constructible<actual_type_t<T>>::value > = 0>
+inline void emplace(world_t *world, flecs::entity_t entity, flecs::id_t id, Args&&... args) {
+    ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
+            "operation invalid for empty type");
+    T& dst = *static_cast<T*>(ecs_emplace_id(world, entity, id, nullptr));
+
+    FLECS_PLACEMENT_NEW(&dst, T{FLECS_FWD(args)...});
+
+    ecs_modified_id(world, entity, id);
 }
 
 /** Return id without generation.
@@ -26688,18 +26750,39 @@ struct entity_builder : entity_view {
         return set_ptr(comp, cptr->size, ptr);
     }
 
+    /** Set a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component it will be added.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
     template<typename T, if_t<is_actual<T>::value> = 0 >
     const Self& set(T&& value) const  {
         flecs::set<T>(this->world_, this->id_, FLECS_FWD(value));
         return to_base();
     }
 
+    /** Set a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component it will be added.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
     template<typename T, if_t<is_actual<T>::value > = 0>
     const Self& set(const T& value) const  {
         flecs::set<T>(this->world_, this->id_, value);
         return to_base();
     }
 
+    /** Set a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component it will be added.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
     template<typename T, typename A = actual_type_t<T>, if_not_t< 
         is_actual<T>::value > = 0>
     const Self& set(A&& value) const  {
@@ -26707,6 +26790,13 @@ struct entity_builder : entity_view {
         return to_base();
     }
 
+    /** Set a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component it will be added.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
     template<typename T, typename A = actual_type_t<T>, if_not_t<
         is_actual<T>::value > = 0>
     const Self& set(const A& value) const  {
@@ -26831,11 +26921,198 @@ struct entity_builder : entity_view {
         return to_base();
     }
 
+    /** Set a pair for an entity.
+     * This operation sets the pair value, and uses Second as type. If the
+     * entity did not yet have the pair, it will be added.
+     *
+     * @tparam First The first element of the pair.
+     * @tparam Second The second element of the pair
+     * @param value The value to set.
+     */
     template <typename First, typename Second>
     const Self& set_second(const Second& value) const  {
         flecs::set<pair_object<First, Second>>(this->world_, this->id_, value);
         return to_base();
+    }
+
+
+    /** Assign a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component the operation will panic.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
+    template<typename T, if_t<is_actual<T>::value> = 0 >
+    const Self& assign(T&& value) const  {
+        flecs::assign<T>(this->world_, this->id_, FLECS_FWD(value));
+        return to_base();
+    }
+
+    /** Assign a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component the operation will panic.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
+    template<typename T, if_t<is_actual<T>::value > = 0>
+    const Self& assign(const T& value) const  {
+        flecs::assign<T>(this->world_, this->id_, value);
+        return to_base();
+    }
+
+    /** Assign a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component the operation will panic.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
+    template<typename T, typename A = actual_type_t<T>, if_not_t< 
+        is_actual<T>::value > = 0>
+    const Self& assign(A&& value) const  {
+        flecs::assign<T>(this->world_, this->id_, FLECS_FWD(value));
+        return to_base();
+    }
+
+    /** Assign a component for an entity.
+     * This operation sets the component value. If the entity did not yet have 
+     * the component the operation will panic.
+     *
+     * @tparam T The component.
+     * @param value The value to set.
+     */
+    template<typename T, typename A = actual_type_t<T>, if_not_t<
+        is_actual<T>::value > = 0>
+    const Self& assign(const A& value) const  {
+        flecs::assign<T>(this->world_, this->id_, value);
+        return to_base();
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam First The first element of the pair.
+     * @tparam Second The second element of the pair
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>
+    const Self& assign(A&& value) const  {
+        flecs::assign<P>(this->world_, this->id_, FLECS_FWD(value));
+        return to_base();
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam First The first element of the pair.
+     * @tparam Second The second element of the pair
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>
+    const Self& assign(const A& value) const  {
+        flecs::assign<P>(this->world_, this->id_, value);
+        return to_base();
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam First The first element of the pair.
+     * @param second The second element of the pair.
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, if_not_t< is_enum<Second>::value > = 0>
+    const Self& assign(Second second, const First& value) const  {
+        auto first = _::type<First>::id(this->world_);
+        flecs::assign(this->world_, this->id_, value, 
+            ecs_pair(first, second));
+        return to_base();
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam First The first element of the pair.
+     * @param second The second element of the pair.
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, if_not_t< is_enum<Second>::value > = 0>
+    const Self& assign(Second second, First&& value) const  {
+        auto first = _::type<First>::id(this->world_);
+        flecs::assign(this->world_, this->id_, FLECS_FWD(value), 
+            ecs_pair(first, second));
+        return to_base();
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam First The first element of the pair.
+     * @param constant The enum constant.
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, if_t< is_enum<Second>::value > = 0>
+    const Self& assign(Second constant, const First& value) const  {
+        const auto& et = enum_type<Second>(this->world_);
+        flecs::entity_t second = et.entity(constant);
+        return assign<First>(second, value);
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses Second as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam Second The second element of the pair
+     * @param first The first element of the pair.
+     * @param value The value to set.
+     */
+    template <typename Second>
+    const Self& assign_second(entity_t first, const Second& value) const  {
+        auto second = _::type<Second>::id(this->world_);
+        ecs_assert( ecs_get_type_info(world_, ecs_pair(first, second)) != NULL,
+            ECS_INVALID_PARAMETER, "pair is not a component");
+        ecs_assert( ecs_get_type_info(world_, ecs_pair(first, second))->component == second,
+            ECS_INVALID_PARAMETER, "type of pair is not Second");
+        flecs::assign(this->world_, this->id_, value, 
+            ecs_pair(first, second));
+        return to_base();
+    }
+
+    /** Assign a pair for an entity.
+     * This operation sets the pair value, and uses Second as type. If the
+     * entity did not yet have the component the operation will panic.
+     *
+     * @tparam Second The second element of the pair
+     * @param first The first element of the pair.
+     * @param value The value to set.
+     */
+    template <typename Second>
+    const Self& assign_second(entity_t first, Second&& value) const  {
+        auto second = _::type<Second>::id(this->world_);
+        ecs_assert( ecs_get_type_info(world_, ecs_pair(first, second)) != NULL,
+            ECS_INVALID_PARAMETER, "pair is not a component");
+        ecs_assert( ecs_get_type_info(world_, ecs_pair(first, second))->component == second,
+            ECS_INVALID_PARAMETER, "type of pair is not Second");
+        flecs::assign(this->world_, this->id_, FLECS_FWD(value), 
+            ecs_pair(first, second));
+        return to_base();
+    }
+
+    template <typename First, typename Second>
+    const Self& assign_second(const Second& value) const  {
+        flecs::assign<pair_object<First, Second>>(this->world_, this->id_, value);
+        return to_base();
     }    
+
 
     /** Set 1..N components.
      * This operation accepts a callback with as arguments the components to
