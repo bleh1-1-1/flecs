@@ -1685,74 +1685,6 @@ assert!(e.is_enabled::<Position>());
 </ul>
 </div>
 
-## Union trait
-The `Union` is similar to `Exclusive` in that it enforces that an entity can have only a single instance of a relationship. The difference between `Exclusive` and `Union` is that `Union` combines different relationship targets in a single table. This reduces table fragmentation, and as a result speeds up add/remove operations. This increase in add/remove speed does come at a cost: iterating a query with union terms is more expensive than iterating a regular relationship.
-
-The API for using the `Union` trait is similar to regular relationships, as this example shows:
-
-<div class="flecs-snippet-tabs">
-<ul>
-<li><b class="tab-title">C</b>
-
-```c
-ecs_entity_t Movement = ecs_new(world);
-ecs_add_id(world, Movement, EcsUnion);
-
-ecs_entity_t Walking = ecs_new(world);
-ecs_entity_t Running = ecs_new(world);
-
-ecs_entity_t e = ecs_new(world);
-ecs_add_pair(world, e, Movement, Running);
-ecs_add_pair(world, e, Movement, Walking); // replaces (Movement, Running)
-```
-
-</li>
-<li><b class="tab-title">C++</b>
-
-```cpp
-flecs::entity Movement = world.entity().add(flecs::Union);
-flecs::entity Walking = world.entity();
-flecs::entity Running = world.entity();
-
-flecs::entity e = world.entity().add(Movement, Running);
-e.add(Movement, Walking); // replaces (Movement, Running)
-```
-
-</li>
-<li><b class="tab-title">C#</b>
-
-```cs
-Entity movement = world.Entity().Add(Ecs.Union);
-Entity walking = world.Entity();
-Entity running = world.Entity();
-
-Entity e = world.Entity().Add(movement, running);
-e.Add(movement, walking); // replaces (Movement, Running)
-```
-
-</li>
-<li><b class="tab-title">Rust</b>
-
-```rust
-let movement = world.entity().add_trait::<flecs::Union>();
-let walking = world.entity();
-let running = world.entity();
-
-let e = world.entity().add_id((movement, running));
-e.add_id((movement, walking)); // replaces (Movement, Running)
-```
-
-</li>
-</ul>
-</div>
-
-When compared to regular relationships, union relationships have some differences and limitations:
-- Relationship cleanup does not work yet for union relationships
-- Removing a union relationship removes any target, even if the specified target is different
-- Union relationships cannot have data
-
-Support for the `Union` trait will be deprececated soon and replaced by exclusive `DontFragment` relationships.
-
 ## Sparse trait
 The `Sparse` trait configures a component to use sparse storage. Sparse components are stored outside of tables, which means they do not have to be moved. Sparse components are also guaranteed to have stable pointers, which means that a component pointer is not invalidated when an entity moves to a new table. ECS operations and queries work as expected with sparse components.
 
@@ -1797,7 +1729,7 @@ world.component::<Position>().add_trait::<flecs::Sparse>();
 </ul>
 </div>
 
-## DontFragment trait (EXPERIMENTAL)
+## DontFragment trait
 The `DontFragment` trait uses the same sparse storage as the `Sparse` trait, but does not fragment tables. This can be desirable especially if a component or relationship is very sparse (e.g. it is only added to a few entities) as this would otherwise result in many tables that only contain a small number of entities.
 
 The following code example shows how to mark a component as `DontFragment`:
@@ -1841,14 +1773,12 @@ Components with the `DontFragment` trait have the following limitations:
 - They don't show up in types (obtained by `ecs_get_type` / `entity::type`)
 - Monitors don't trigger on `DontFragment` components. The reason for this is that monitors compare the previous table with the current table of an entity to determine if an entity started matching, and `DontFragment` components aren't part of the table.
 
-Support for `DontFragment` is currently experimental and there are a number of temporary limitations:
+Support for `DontFragment` has a number of (temporary) limitations:
 - `target_for` does not yet work for `DontFragment` components.
 - `DontFragment` components are not serialized yet to JSON (and don't show up in the explorer).
 - `Or`, `Optional`, `AndFrom` and `NotFrom` operators are not yet supported.
-- `Not` operators are only supported for non-wildcard terms.
 - Component inheritance and transitivity are not yet supported.
-- Queries for `DontFragment` components may run slower than necessary.
-- The `flecs::Any` wildcard does not yet work
+- Queries for `DontFragment` components may run slower than expected.
 
 What does work:
 - ECS operations (`add`, `remove`, `get`, `get_mut`, `ensure`, `emplace`, `set`, `delete`).

@@ -457,6 +457,8 @@ void Sparse_add_remove_tag(void);
 void Sparse_add_remove_pair(void);
 void Sparse_add_remove_pair_tag(void);
 void Sparse_add_remove_twice_w_hooks(void);
+void Sparse_add_remove_add(void);
+void Sparse_add_remove_add_exclusive(void);
 void Sparse_remove_after_add_non_sparse(void);
 void Sparse_remove_after_add_non_sparse_pair(void);
 void Sparse_remove_pair_wildcard_rel(void);
@@ -553,6 +555,8 @@ void Sparse_target_2_pairs(void);
 void Sparse_target_exclusive_pair(void);
 void Sparse_target_exclusive_pair_after_change(void);
 void Sparse_target_exclusive_pair_after_add_same(void);
+void Sparse_target_recycled(void);
+void Sparse_target_recycled_exclusive(void);
 void Sparse_target_from_base(void);
 void Sparse_target_for_base(void);
 void Sparse_target_for_self_sparse_component(void);
@@ -598,6 +602,9 @@ void Sparse_defer_batched_remove_exclusive_pair(void);
 void Sparse_defer_batched_remove_tag(void);
 void Sparse_defer_batched_remove_pair_tag(void);
 void Sparse_defer_batched_remove_exclusive_pair_tag(void);
+void Sparse_defer_change_exclusive(void);
+void Sparse_defer_add_pair_2_commands(void);
+void Sparse_defer_add_pair_exclusive_2_commands(void);
 void Sparse_dont_fragment_trait_without_sparse_trait(void);
 void Sparse_on_delete_sparse_remove(void);
 void Sparse_on_delete_sparse_delete(void);
@@ -609,60 +616,6 @@ void Sparse_delete_relationship(void);
 void Sparse_delete_parent_of_relationship(void);
 void Sparse_delete_exclusive_relationship(void);
 void Sparse_delete_parent_of_exclusive_relationship(void);
-
-// Testsuite 'Union'
-void Union_add(void);
-void Union_add_twice(void);
-void Union_add_replace(void);
-void Union_add_remove(void);
-void Union_add_remove_recycled(void);
-void Union_add_remove_add(void);
-void Union_get_target_none(void);
-void Union_get_target(void);
-void Union_get_recycled_target(void);
-void Union_get_target_after_replace(void);
-void Union_get_target_after_remove(void);
-void Union_has_wildcard(void);
-void Union_has_any(void);
-void Union_add_remove_2_tgts(void);
-void Union_add_remove_2_tgts_join(void);
-void Union_add_remove_3_tgts(void);
-void Union_add_remove_3_tgts_join(void);
-void Union_remove_w_union_tgt(void);
-void Union_get_non_union_tgt_from_table_w_union(void);
-void Union_has_non_union_from_table_w_union(void);
-void Union_get_case_no_switch(void);
-void Union_get_case_set(void);
-void Union_get_case_change(void);
-void Union_remove_case(void);
-void Union_remove_last(void);
-void Union_delete_first(void);
-void Union_delete_last(void);
-void Union_delete_first_last(void);
-void Union_3_entities_same_case(void);
-void Union_2_entities_1_change_case(void);
-void Union_3_entities_change_case(void);
-void Union_add_case_in_stage(void);
-void Union_change_case_in_stage(void);
-void Union_change_one_case_in_stage(void);
-void Union_remove_switch_in_stage(void);
-void Union_switch_no_match_for_case(void);
-void Union_empty_entity_has_case(void);
-void Union_zero_entity_has_case(void);
-void Union_add_to_entity_w_switch(void);
-void Union_add_pair_to_entity_w_switch(void);
-void Union_recycled_tags(void);
-void Union_same_table_after_change(void);
-void Union_add_2(void);
-void Union_add_2_reverse(void);
-void Union_add_switch_to_prefab_instance(void);
-void Union_get_case_w_generation(void);
-void Union_get_case_w_generation_not_alive(void);
-void Union_defer_add_union_relationship(void);
-void Union_defer_add_existing_union_relationship(void);
-void Union_defer_add_union_relationship_2_ops(void);
-void Union_defer_add_existing_union_relationship_2_ops(void);
-void Union_stress_test_1(void);
 
 // Testsuite 'Hierarchies'
 void Hierarchies_setup(void);
@@ -805,6 +758,10 @@ void OrderedChildren_change_order_null_children_nonzero_count(void);
 void OrderedChildren_change_order_not_null_children_zero_count(void);
 void OrderedChildren_change_order_on_parent_without_ordered_children(void);
 void OrderedChildren_change_order(void);
+void OrderedChildren_get_ordered_children_empty(void);
+void OrderedChildren_get_ordered_children_invalid(void);
+void OrderedChildren_get_ordered_children(void);
+void OrderedChildren_get_ordered_children_from_stage(void);
 
 // Testsuite 'Has'
 void Has_zero(void);
@@ -4386,6 +4343,14 @@ bake_test_case Sparse_testcases[] = {
         Sparse_add_remove_twice_w_hooks
     },
     {
+        "add_remove_add",
+        Sparse_add_remove_add
+    },
+    {
+        "add_remove_add_exclusive",
+        Sparse_add_remove_add_exclusive
+    },
+    {
         "remove_after_add_non_sparse",
         Sparse_remove_after_add_non_sparse
     },
@@ -4770,6 +4735,14 @@ bake_test_case Sparse_testcases[] = {
         Sparse_target_exclusive_pair_after_add_same
     },
     {
+        "target_recycled",
+        Sparse_target_recycled
+    },
+    {
+        "target_recycled_exclusive",
+        Sparse_target_recycled_exclusive
+    },
+    {
         "target_from_base",
         Sparse_target_from_base
     },
@@ -4950,6 +4923,18 @@ bake_test_case Sparse_testcases[] = {
         Sparse_defer_batched_remove_exclusive_pair_tag
     },
     {
+        "defer_change_exclusive",
+        Sparse_defer_change_exclusive
+    },
+    {
+        "defer_add_pair_2_commands",
+        Sparse_defer_add_pair_2_commands
+    },
+    {
+        "defer_add_pair_exclusive_2_commands",
+        Sparse_defer_add_pair_exclusive_2_commands
+    },
+    {
         "dont_fragment_trait_without_sparse_trait",
         Sparse_dont_fragment_trait_without_sparse_trait
     },
@@ -4992,217 +4977,6 @@ bake_test_case Sparse_testcases[] = {
     {
         "delete_parent_of_exclusive_relationship",
         Sparse_delete_parent_of_exclusive_relationship
-    }
-};
-
-bake_test_case Union_testcases[] = {
-    {
-        "add",
-        Union_add
-    },
-    {
-        "add_twice",
-        Union_add_twice
-    },
-    {
-        "add_replace",
-        Union_add_replace
-    },
-    {
-        "add_remove",
-        Union_add_remove
-    },
-    {
-        "add_remove_recycled",
-        Union_add_remove_recycled
-    },
-    {
-        "add_remove_add",
-        Union_add_remove_add
-    },
-    {
-        "get_target_none",
-        Union_get_target_none
-    },
-    {
-        "get_target",
-        Union_get_target
-    },
-    {
-        "get_recycled_target",
-        Union_get_recycled_target
-    },
-    {
-        "get_target_after_replace",
-        Union_get_target_after_replace
-    },
-    {
-        "get_target_after_remove",
-        Union_get_target_after_remove
-    },
-    {
-        "has_wildcard",
-        Union_has_wildcard
-    },
-    {
-        "has_any",
-        Union_has_any
-    },
-    {
-        "add_remove_2_tgts",
-        Union_add_remove_2_tgts
-    },
-    {
-        "add_remove_2_tgts_join",
-        Union_add_remove_2_tgts_join
-    },
-    {
-        "add_remove_3_tgts",
-        Union_add_remove_3_tgts
-    },
-    {
-        "add_remove_3_tgts_join",
-        Union_add_remove_3_tgts_join
-    },
-    {
-        "remove_w_union_tgt",
-        Union_remove_w_union_tgt
-    },
-    {
-        "get_non_union_tgt_from_table_w_union",
-        Union_get_non_union_tgt_from_table_w_union
-    },
-    {
-        "has_non_union_from_table_w_union",
-        Union_has_non_union_from_table_w_union
-    },
-    {
-        "get_case_no_switch",
-        Union_get_case_no_switch
-    },
-    {
-        "get_case_set",
-        Union_get_case_set
-    },
-    {
-        "get_case_change",
-        Union_get_case_change
-    },
-    {
-        "remove_case",
-        Union_remove_case
-    },
-    {
-        "remove_last",
-        Union_remove_last
-    },
-    {
-        "delete_first",
-        Union_delete_first
-    },
-    {
-        "delete_last",
-        Union_delete_last
-    },
-    {
-        "delete_first_last",
-        Union_delete_first_last
-    },
-    {
-        "3_entities_same_case",
-        Union_3_entities_same_case
-    },
-    {
-        "2_entities_1_change_case",
-        Union_2_entities_1_change_case
-    },
-    {
-        "3_entities_change_case",
-        Union_3_entities_change_case
-    },
-    {
-        "add_case_in_stage",
-        Union_add_case_in_stage
-    },
-    {
-        "change_case_in_stage",
-        Union_change_case_in_stage
-    },
-    {
-        "change_one_case_in_stage",
-        Union_change_one_case_in_stage
-    },
-    {
-        "remove_switch_in_stage",
-        Union_remove_switch_in_stage
-    },
-    {
-        "switch_no_match_for_case",
-        Union_switch_no_match_for_case
-    },
-    {
-        "empty_entity_has_case",
-        Union_empty_entity_has_case
-    },
-    {
-        "zero_entity_has_case",
-        Union_zero_entity_has_case
-    },
-    {
-        "add_to_entity_w_switch",
-        Union_add_to_entity_w_switch
-    },
-    {
-        "add_pair_to_entity_w_switch",
-        Union_add_pair_to_entity_w_switch
-    },
-    {
-        "recycled_tags",
-        Union_recycled_tags
-    },
-    {
-        "same_table_after_change",
-        Union_same_table_after_change
-    },
-    {
-        "add_2",
-        Union_add_2
-    },
-    {
-        "add_2_reverse",
-        Union_add_2_reverse
-    },
-    {
-        "add_switch_to_prefab_instance",
-        Union_add_switch_to_prefab_instance
-    },
-    {
-        "get_case_w_generation",
-        Union_get_case_w_generation
-    },
-    {
-        "get_case_w_generation_not_alive",
-        Union_get_case_w_generation_not_alive
-    },
-    {
-        "defer_add_union_relationship",
-        Union_defer_add_union_relationship
-    },
-    {
-        "defer_add_existing_union_relationship",
-        Union_defer_add_existing_union_relationship
-    },
-    {
-        "defer_add_union_relationship_2_ops",
-        Union_defer_add_union_relationship_2_ops
-    },
-    {
-        "defer_add_existing_union_relationship_2_ops",
-        Union_defer_add_existing_union_relationship_2_ops
-    },
-    {
-        "stress_test_1",
-        Union_stress_test_1
     }
 };
 
@@ -5757,6 +5531,22 @@ bake_test_case OrderedChildren_testcases[] = {
     {
         "change_order",
         OrderedChildren_change_order
+    },
+    {
+        "get_ordered_children_empty",
+        OrderedChildren_get_ordered_children_empty
+    },
+    {
+        "get_ordered_children_invalid",
+        OrderedChildren_get_ordered_children_invalid
+    },
+    {
+        "get_ordered_children",
+        OrderedChildren_get_ordered_children
+    },
+    {
+        "get_ordered_children_from_stage",
+        OrderedChildren_get_ordered_children_from_stage
     }
 };
 
@@ -13026,17 +12816,10 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        164,
+        171,
         Sparse_testcases,
         1,
         Sparse_params
-    },
-    {
-        "Union",
-        NULL,
-        NULL,
-        52,
-        Union_testcases
     },
     {
         "Hierarchies",
@@ -13049,7 +12832,7 @@ static bake_test_suite suites[] = {
         "OrderedChildren",
         NULL,
         NULL,
-        29,
+        33,
         OrderedChildren_testcases
     },
     {
@@ -13286,5 +13069,5 @@ static bake_test_suite suites[] = {
 };
 
 int main(int argc, char *argv[]) {
-    return bake_test_run("core", argc, argv, suites, 48);
+    return bake_test_run("core", argc, argv, suites, 47);
 }

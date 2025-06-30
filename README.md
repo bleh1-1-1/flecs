@@ -103,13 +103,6 @@ int main(int argc, char *argv[]) {
 ## Projects using Flecs
 If you have a project you'd like to share, let me know on [Discord](https://discord.gg/BEzP5Rgrrp)!
 
-### [Hytale](https://hytale.com/)
-[![Hytale](docs/img/projects/hytale.png)](https://hytale.com/)
-
-> We knew that we wanted to build Hytale around an Entity-Component-System (ECS). When we analyzed the options, FLECS rose to the top. FLECS provides the backbone of the Hytale Game Engine. Its flexibility has allowed us to build highly varied gameplay while supporting our vision for empowering Creators.
-
--- Dann Webster, Hypixel studios
-
 ### Tempest Rising
 [![Tempest Rising](docs/img/projects/tempest_rising.png)](https://store.steampowered.com/app/1486920/Tempest_Rising/)
 
@@ -130,6 +123,12 @@ If you have a project you'd like to share, let me know on [Discord](https://disc
 
 ### Extermination Shock
 [![image](docs/img/projects/extermination_shock.png)](https://store.steampowered.com/app/2510820/Extermination_Shock/)
+
+### ECS survivors
+[![image](docs/img/projects/ecs_survivors.png)](https://laurent-voisard.itch.io/ecs-survivors/)
+
+### Ascendant
+[![image](docs/img/projects/ascendant.jpg)](https://vkguide.dev/docs/ascendant/)
 
 ### Tome Tumble Tournament
 [![image](docs/img/projects/tome_tumble.png)](https://terzalo.itch.io/tome-tumble-tournament)

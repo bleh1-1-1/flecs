@@ -877,15 +877,6 @@ int flecs_term_finalize(
                         }
                     }
                 }
-
-                /* Check if term is union */
-                if (ecs_table_has_id(world, first_table, EcsUnion)) {
-                    /* Any wildcards don't need special handling as they just return
-                     * (Rel, *). */
-                    if (ECS_IS_PAIR(term->id) && ECS_PAIR_SECOND(term->id) != EcsAny) {
-                        term->flags_ |= EcsTermIsUnion;
-                    }
-                }
             }
 
             if (ecs_table_has_id(world, first_table, EcsDontFragment)) {
@@ -1014,7 +1005,7 @@ int flecs_term_finalize(
         trivial_term = false;
     }
 
-    if (term->flags_ & EcsTermIsUnion) {
+    if (term->flags_ & EcsTermDontFragment) {
         trivial_term = false;
         cacheable_term = false;
     }
@@ -1239,8 +1230,6 @@ int flecs_query_finalize_terms(
         } else if (term->inout == EcsInOutNone) {
             nodata_term = true;
         } else if (!ecs_get_type_info(world, term->id)) {
-            nodata_term = true;
-        } else if (term->flags_ & EcsTermIsUnion) {
             nodata_term = true;
         } else if (term->flags_ & EcsTermIsMember) {
             nodata_term = true;
@@ -1620,6 +1609,8 @@ bool flecs_query_finalize_simple(
 
         if (term->src.id == (EcsThis|EcsSelf|EcsIsVariable)) {
             cmp_term.src.id = EcsThis|EcsSelf|EcsIsVariable;
+        } else if (term->src.id == EcsSelf) {
+            cmp_term.src.id = EcsSelf;
         }
 
         if (term->first.id == (term->id|EcsSelf|EcsIsEntity)) {
@@ -1657,6 +1648,8 @@ bool flecs_query_finalize_simple(
             term->second.id = second | EcsIsEntity | EcsSelf;
         }
 
+        bool is_self = term->src.id == EcsSelf;
+
         term->field_index = i;
         term->first.id = first | EcsIsEntity | EcsSelf;
         term->src.id = EcsThis | EcsIsVariable | EcsSelf;
@@ -1682,7 +1675,7 @@ bool flecs_query_finalize_simple(
                 q->data_fields |= (ecs_termset_t)(1llu << i);
             }
 
-            if (cr->flags & EcsIdOnInstantiateInherit) {
+            if (!is_self && cr->flags & EcsIdOnInstantiateInherit) {
                 term->src.id |= EcsUp;
                 term->trav = EcsIsA;
                 up_count ++;
@@ -1696,14 +1689,6 @@ bool flecs_query_finalize_simple(
             if (cr->flags & EcsIdDontFragment) {
                 term->flags_ |= EcsTermDontFragment;
                 trivial = false;
-            }
-
-            if (ECS_IS_PAIR(id)) {
-                if (cr->flags & EcsIdIsUnion) {
-                    term->flags_ |= EcsTermIsUnion;
-                    trivial = false;
-                    cacheable = false;
-                }
             }
 
             if (cr->flags & EcsIdIsSparse) {
