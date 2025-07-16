@@ -21877,6 +21877,7 @@ concept IsFlecsSingleton = requires {
     T::is_singleton; 
     T::is_optional;
 	T::is_parent;
+	T::is_second;
 } && T::is_singleton;
 
 template<typename T>
@@ -21885,6 +21886,7 @@ concept IsFlecsOptional = requires {
     T::is_singleton; 
     T::is_optional;
 	T::is_parent;
+	T::is_second;
 } && T::is_optional;
 
 template<typename T>
@@ -21893,8 +21895,17 @@ concept IsFlecsParent = requires {
     T::is_singleton; 
     T::is_optional;
 	T::is_parent;
+	T::is_second;
 } && T::is_parent;
 
+template<typename T>
+concept IsFlecsSecond = requires { 
+    typename T::type;
+    T::is_singleton; 
+    T::is_optional;
+	T::is_parent;
+	T::is_second;
+} && T::is_second;
 
 template<typename T>
 concept IsFlecsWrapper = requires {
@@ -21902,7 +21913,8 @@ concept IsFlecsWrapper = requires {
     T::is_singleton;
     T::is_optional;
 	T::is_parent;
-} && (T::is_singleton || T::is_optional || T::is_parent);
+	T::is_second;
+} && (T::is_singleton || T::is_optional || T::is_parent || T::is_second);
 
 template<typename T>
 concept IsPlainComponent = !IsFlecsWrapper<T>;
@@ -21914,6 +21926,7 @@ struct singleton_t {
     static constexpr bool is_singleton = true;
     static constexpr bool is_optional = false;
 	static constexpr bool is_parent = false;
+	static constexpr bool is_second = false;
 };
 
 template<typename T>
@@ -21922,6 +21935,7 @@ struct optional_t {
     static constexpr bool is_singleton = false;
     static constexpr bool is_optional = true;
 	static constexpr bool is_parent = false;
+	static constexpr bool is_second = false;
 };
 
 template<typename T>
@@ -21930,6 +21944,7 @@ struct singleton_optional_t {
     static constexpr bool is_singleton = true;
     static constexpr bool is_optional = true;
 	static constexpr bool is_parent = false;
+	static constexpr bool is_second = false;
 };
 
 template<typename T>
@@ -21938,16 +21953,38 @@ struct parent_t {
     static constexpr bool is_singleton = false;
     static constexpr bool is_optional = false;
 	static constexpr bool is_parent = true;
+	static constexpr bool is_second = false;
 };
+
 template<typename T>
 struct parent_optional_t {
     using type = T;
     static constexpr bool is_singleton = false;
     static constexpr bool is_optional = true;
 	static constexpr bool is_parent = true;
+	static constexpr bool is_second = false;
 };
 
-// Only unwrap our specific wrapper types
+template<typename T0, typename T1>
+struct second_t {
+    using type = T0;
+	using second_type = T1;
+    static constexpr bool is_singleton = false;
+    static constexpr bool is_optional = false;
+	static constexpr bool is_parent = false;
+	static constexpr bool is_second = true;
+};
+
+template<typename T0, typename T1>
+struct parent_second_t {
+    using type = T0;
+	using second_type = T1;
+    static constexpr bool is_singleton = false;
+    static constexpr bool is_optional = false;
+	static constexpr bool is_parent = true;
+	static constexpr bool is_second = true;
+};
+
 template<typename T>
 constexpr auto unwrap_type() {
     if constexpr (IsFlecsWrapper<T>) {
@@ -21956,9 +21993,23 @@ constexpr auto unwrap_type() {
         return static_cast<T*>(nullptr);
     }
 }
+template<typename T>
+constexpr auto unwrap_second() {
+    if constexpr (IsFlecsWrapper<T> && IsFlecsSecond<T>) {
+        return static_cast<typename T::second_type*>(nullptr);
+    } else {
+        return static_cast<T*>(nullptr);
+    }
+}
+
+
 
 template<typename T>
 using unwrap_type_t = std::remove_pointer_t<decltype(unwrap_type<T>())>;
+
+
+template<typename T>
+using second_type_t = std::remove_pointer_t<decltype(unwrap_second<T>())>;
 
 /**
  * @defgroup cpp_world World
@@ -33487,6 +33538,8 @@ inline flecs::system_builder<unwrap_type_t<Comps>...> world::system(Args &&... a
 
 	auto configure_one = [&term_index, &builder](auto* component_type) {
     	using T = std::remove_pointer_t<decltype(component_type)>;
+		using T1 = second_type_t<T>;
+
    		if constexpr (IsFlecsSingleton<T>) {
    		    builder.term_at(term_index).singleton();
    		}
@@ -33496,6 +33549,10 @@ inline flecs::system_builder<unwrap_type_t<Comps>...> world::system(Args &&... a
    		if constexpr (IsFlecsParent<T>) {
    		    builder.term_at(term_index).parent();
    		}
+		if constexpr (IsFlecsSecond<T>)
+		{
+			builder.term_at(term_index).template second<T1>();
+		}
    		term_index++;
 	};
 
