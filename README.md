@@ -118,11 +118,14 @@ If you have a project you'd like to share, let me know on [Discord](https://disc
 ### FEAST
 [![image](docs/img/projects/feast.jpg)](https://store.steampowered.com/app/3823480/FEAST/)
 
-### The Forge
-[![image](docs/img/projects/the_forge.jpg)](https://github.com/ConfettiFX/The-Forge)
+### Gloam Vault
+[![image](docs/img/projects/gloam_vault.png)](https://store.steampowered.com/app/3460840/Gloamvault/)
 
 ### Extermination Shock
 [![image](docs/img/projects/extermination_shock.png)](https://store.steampowered.com/app/2510820/Extermination_Shock/)
+
+### The Forge
+[![image](docs/img/projects/the_forge.jpg)](https://github.com/ConfettiFX/The-Forge)
 
 ### ECS survivors
 [![image](docs/img/projects/ecs_survivors.png)](https://laurent-voisard.itch.io/ecs-survivors/)
@@ -132,9 +135,6 @@ If you have a project you'd like to share, let me know on [Discord](https://disc
 
 ### Tome Tumble Tournament
 [![image](docs/img/projects/tome_tumble.png)](https://terzalo.itch.io/tome-tumble-tournament)
-
-### Hyperion Minecraft Server
-[![image](docs/img/projects/hyperion.png)](https://github.com/andrewgazelka/hyperion)
 
 ### Sol Survivor
 [![image](docs/img/projects/sol_survivor.png)](https://nicok.itch.io/sol-survivor-demo)

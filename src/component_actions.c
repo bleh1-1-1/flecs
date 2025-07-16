@@ -31,12 +31,12 @@ void flecs_invoke_hook(
         world->stages[0]->defer *= -1;
     }
 
-    ecs_iter_t it = { .field_count = 1};
+    ecs_iter_t it = { .field_count = 1 };
     it.entities = entities;
 
     ecs_table_record_t dummy_tr;
     if (!tr) {
-        dummy_tr.hdr.cache = ECS_CONST_CAST(ecs_table_cache_t*, cr);
+        dummy_tr.hdr.cr = ECS_CONST_CAST(ecs_component_record_t*, cr);
         dummy_tr.hdr.table = table;
         dummy_tr.index = -1;
         dummy_tr.column = -1;
@@ -50,7 +50,7 @@ void flecs_invoke_hook(
     it.real_world = world;
     it.table = table;
     it.trs = &tr;
-    it.row_fields = !!(((ecs_component_record_t*)tr->hdr.cache)->flags & EcsIdIsSparse);
+    it.row_fields = !!(tr->hdr.cr->flags & EcsIdIsSparse);
     it.ref_fields = it.row_fields;
     it.sizes = ECS_CONST_CAST(ecs_size_t*, &ti->size);
     it.ids = &id;
@@ -64,6 +64,52 @@ void flecs_invoke_hook(
     it.flags = EcsIterIsValid;
 
     hook(&it);
+
+    world->stages[0]->defer = defer;
+}
+
+void flecs_invoke_replace_hook(
+    ecs_world_t *world,
+    ecs_table_t *table,
+    ecs_entity_t entity,
+    ecs_id_t id,
+    const void *old_ptr,
+    const void *new_ptr,
+    const ecs_type_info_t *ti)
+{
+    int32_t defer = world->stages[0]->defer;
+    if (defer < 0) {
+        world->stages[0]->defer *= -1;
+    }
+
+    ecs_iter_t it = { .field_count = 2 };
+    it.entities = &entity;
+
+    const ecs_table_record_t *trs[] = {NULL, NULL};
+    ecs_size_t sizes[] = {ti->size, ti->size};
+    ecs_id_t ids[] = {id, id};
+    ecs_entity_t srcs[] = {0, 0};
+    const void *ptrs[] = {old_ptr, new_ptr};
+
+    it.world = world;
+    it.real_world = world;
+    it.table = table;
+    it.trs = trs;
+    it.row_fields = 0;
+    it.ref_fields = it.row_fields;
+    it.sizes = sizes;
+    it.ptrs = ECS_CONST_CAST(void**, ptrs);
+    it.ids = ids;
+    it.sources = srcs;
+    it.event = 0;
+    it.event_id = id;
+    it.ctx = ti->hooks.ctx;
+    it.callback_ctx = ti->hooks.binding_ctx;
+    it.count = 1;
+    it.offset = 0; /* Don't set row because we don't want to offset ptrs */
+    it.flags = EcsIterIsValid;
+
+    ti->hooks.on_replace(&it);
 
     world->stages[0]->defer = defer;
 }
@@ -220,7 +266,7 @@ void flecs_entity_remove_non_fragmenting(
             if (flecs_sparse_has(cur->sparse, e)) {
                 ecs_type_t type = { .count = 1, .array = &cur->id };
 
-                flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+                flecs_emit(world, world, &(ecs_event_desc_t) {
                     .event = EcsOnRemove,
                     .ids = &type,
                     .table = r->table,
@@ -249,7 +295,6 @@ void flecs_notify_on_add(
     int32_t count,
     const ecs_table_diff_t *diff,
     ecs_flags32_t flags,
-    ecs_flags64_t *set_mask,
     bool construct,
     bool sparse)
 {
@@ -274,7 +319,7 @@ void flecs_notify_on_add(
         }
 
         if (diff_flags & (EcsTableHasOnAdd|EcsTableHasTraversable)) {
-            flecs_emit(world, world, set_mask, &(ecs_event_desc_t){
+            flecs_emit(world, world, &(ecs_event_desc_t){
                 .event = EcsOnAdd,
                 .ids = added,
                 .table = table,
@@ -301,6 +346,12 @@ void flecs_notify_on_remove(
     ecs_assert(count != 0, ECS_INTERNAL_ERROR, NULL);
 
     if (removed->count) {
+        if (!(world->flags & EcsWorldFini)) {
+            ecs_check(!(table->flags & EcsTableHasBuiltins), 
+                ECS_INVALID_OPERATION,
+                "removing components from builtin entities is not allowed");
+        }
+
         ecs_flags32_t diff_flags = 
             diff->removed_flags|(table->flags & EcsTableHasTraversable);
         if (!diff_flags) {
@@ -320,7 +371,7 @@ void flecs_notify_on_remove(
         }
 
         if (diff_flags & (EcsTableHasOnRemove|EcsTableHasTraversable)) {
-            flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+            flecs_emit(world, world, &(ecs_event_desc_t) {
                 .event = EcsOnRemove,
                 .ids = removed,
                 .table = table,
@@ -335,6 +386,8 @@ void flecs_notify_on_remove(
             flecs_sparse_on_remove(world, table, row, count, removed);
         }
     }
+error:
+    return;
 }
 
 void flecs_notify_on_set_ids(
@@ -368,7 +421,7 @@ void flecs_notify_on_set_ids(
         const ecs_table_record_t *tr = 
         flecs_component_get_table(cr, table);
         if (!tr) {
-            dummy_tr.hdr.cache = (ecs_table_cache_t*)cr;
+            dummy_tr.hdr.cr = cr;
             dummy_tr.hdr.table = table;
             dummy_tr.column = -1;
             dummy_tr.index = -1;
@@ -394,7 +447,7 @@ void flecs_notify_on_set_ids(
 
     /* Run OnSet notifications */
     if ((dont_fragment || table->flags & EcsTableHasOnSet) && ids->count) {
-        flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+        flecs_emit(world, world, &(ecs_event_desc_t) {
             .event = EcsOnSet,
             .ids = ids,
             .table = table,
@@ -429,7 +482,7 @@ void flecs_notify_on_set(
             const ecs_table_record_t *tr = 
             flecs_component_get_table(cr, table);
             if (!tr) {
-                dummy_tr.hdr.cache = (ecs_table_cache_t*)cr;
+                dummy_tr.hdr.cr = cr;
                 dummy_tr.hdr.table = table;
                 dummy_tr.column = -1;
                 dummy_tr.index = -1;
@@ -454,7 +507,7 @@ void flecs_notify_on_set(
     /* Run OnSet notifications */
     if ((dont_fragment || table->flags & EcsTableHasOnSet)) {
         ecs_type_t ids = { .array = &id, .count = 1 };
-        flecs_emit(world, world, 0, &(ecs_event_desc_t) {
+        flecs_emit(world, world, &(ecs_event_desc_t) {
             .event = EcsOnSet,
             .ids = &ids,
             .table = table,

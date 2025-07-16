@@ -6,10 +6,33 @@
 #ifndef FLECS_ENTITY_H
 #define FLECS_ENTITY_H
 
+#define ecs_get_low_id(table, r, id)\
+    ecs_assert(table->component_map != NULL, ECS_INTERNAL_ERROR, NULL);\
+    int16_t column_index = table->component_map[id];\
+    if (column_index > 0) {\
+        ecs_column_t *column = &table->data.columns[column_index - 1];\
+        return ECS_ELEM(column->data, column->ti->size, \
+            ECS_RECORD_TO_ROW(r->row));\
+    }
+
 typedef struct {
     const ecs_type_info_t *ti;
     void *ptr;
 } flecs_component_ptr_t;
+
+flecs_component_ptr_t flecs_ensure(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_entity_t id,
+    ecs_record_t *r,
+    ecs_size_t size);
+
+flecs_component_ptr_t flecs_get_mut(
+    const ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_entity_t id,
+    ecs_record_t *r,
+    ecs_size_t size);
 
 /* Get component pointer with type info. */
 flecs_component_ptr_t flecs_get_component_ptr(
@@ -42,7 +65,6 @@ const ecs_entity_t* flecs_bulk_new(
 /* Add new entity id to root table. */
 void flecs_add_to_root_table(
     ecs_world_t *world,
-    ecs_stage_t *stage,
     ecs_entity_t e);
 
 /* Mark an entity as being watched. This is used to trigger automatic rematching

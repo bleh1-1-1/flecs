@@ -477,7 +477,7 @@ int flecs_script_eval_scope(
     if (v->entity) {
         ecs_entity_t src = v->entity->eval;
         int32_t count = ecs_vec_count(&node->components);
-        if (src != EcsSingleton && count) {
+        if (src != EcsVariable && count) {
             flecs_add_ids(
                 v->world, src, ecs_vec_first(&node->components), count);
         }
@@ -841,7 +841,8 @@ int flecs_script_eval_component(
         ecs_table_t *table = r->table;
  
         ecs_value_t value = {
-            .ptr = ecs_ensure_id(v->world, src, node->id.eval),
+            .ptr = ecs_ensure_id(v->world, src, node->id.eval, 
+                flecs_ito(size_t, ti->size)),
             .type = ti->component
         };
 
@@ -899,7 +900,8 @@ int flecs_script_eval_var_component(
         }
 
         ecs_value_t value = {
-            .ptr = ecs_ensure_id(v->world, v->entity->eval, var_id),
+            .ptr = ecs_ensure_id(v->world, v->entity->eval, var_id, 
+                flecs_ito(size_t, ti->size)),
             .type = var_id
         };
 
@@ -944,7 +946,8 @@ int flecs_script_eval_default_component(
         return -1;
     }
 
-    if (ecs_get_type_info(v->world, default_type) == NULL) {
+    const ecs_type_info_t *ti = ecs_get_type_info(v->world, default_type);
+    if (ti == NULL) {
         char *id_str = ecs_id_str(v->world, default_type);
         flecs_script_eval_error(v, node,
             "cannot use tag '%s' as default type in assignment",
@@ -954,7 +957,8 @@ int flecs_script_eval_default_component(
     }
 
     ecs_value_t value = {
-        .ptr = ecs_ensure_id(v->world, v->entity->eval, default_type),
+        .ptr = ecs_ensure_id(v->world, v->entity->eval, default_type, 
+            flecs_ito(size_t, ti->size)),
         .type = default_type
     };
 

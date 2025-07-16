@@ -78,14 +78,9 @@ int flecs_term_ref_finalize_flags(
     if (ref->name && ref->name[0] == '$') {
         if (!ref->name[1]) {
             if (!(ref->id & EcsIsName)) {
-                if (ref->id & ~EcsTermRefFlags) {
-                    flecs_query_validator_error(ctx, 
-                        "conflicting values for .name and .id");
-                    return -1;
-                }
-
-                ref->id |= EcsVariable;
-                ref->id |= EcsIsVariable;
+                flecs_query_validator_error(ctx, "invalid variable name "
+                    "('$' syntax support is removed, use new Singleton trait)");
+                return -1;
             }
         } else {
             ref->name = &ref->name[1];
@@ -601,10 +596,8 @@ int flecs_term_verify(
                 if (is_same && ecs_has_id(world, first_id, EcsAcyclic)
                     && !(term->flags_ & EcsTermReflexive)) 
                 {
-                    char *pred_str = ecs_get_path(world, term->first.id);
-                    flecs_query_validator_error(ctx, "term with acyclic relationship"
-                        " '%s' cannot have same subject and object", pred_str);
-                    ecs_os_free(pred_str);
+                    flecs_query_validator_error(ctx, "term with acyclic "
+                        "relationship cannot have same source and target");
                     return -1;
                 }
             }
@@ -1091,7 +1084,7 @@ void flecs_normalize_term_name(
 
 static
 int flecs_query_finalize_terms(
-    const ecs_world_t *world,
+    ecs_world_t *world,
     ecs_query_t *q,
     const ecs_query_desc_t *desc)
 {
@@ -1119,10 +1112,12 @@ int flecs_query_finalize_terms(
 
     bool cacheable = true;
     bool match_nothing = true;
+
     for (i = 0; i < term_count; i ++) {
         ecs_term_t *term = &terms[i];
         bool prev_is_or = i && term[-1].oper == EcsOr;
         bool nodata_term = false;
+        bool default_src = term->src.id == 0 && term->src.name == NULL;
         ctx.term_index = i;
 
         if (flecs_term_finalize(world, term, &ctx)) {
@@ -1173,17 +1168,7 @@ int flecs_query_finalize_terms(
             }
         }
 
-        if (prev_is_or) {
-            if (ECS_TERM_REF_ID(&term[-1].src) != ECS_TERM_REF_ID(&term->src)) {
-                flecs_query_validator_error(&ctx, "mismatching src.id for OR terms");
-                return -1;
-            }
-            if (term->oper != EcsOr && term->oper != EcsAnd) {
-                flecs_query_validator_error(&ctx, 
-                    "term after OR operator must use AND operator");
-                return -1;
-            }
-        } else {
+        if (!prev_is_or) {
             field_count ++;
         }
 
@@ -1294,6 +1279,60 @@ int flecs_query_finalize_terms(
             }
         }
 
+        bool is_sparse = false;
+        bool keep_alive = true;
+
+        ecs_component_record_t *cr = flecs_components_get(world, term->id);
+        if (!cr) {
+            if (ECS_IS_PAIR(term->id) && ECS_PAIR_SECOND(term->id) != EcsWildcard) {
+                ecs_entity_t first = ECS_PAIR_FIRST(term->id);
+                cr = flecs_components_get(world, ecs_pair(first, EcsWildcard));
+                keep_alive = false;
+            }
+        }
+
+        if (cr) {
+            if (keep_alive) {
+                if (ecs_os_has_threading()) {
+                    ecs_os_ainc(&cr->keep_alive);
+                } else {
+                    cr->keep_alive ++;
+                }
+
+                term->flags_ |= EcsTermKeepAlive;
+            }
+
+            if (cr->flags & EcsIdIsSparse) {
+                is_sparse = true;
+            }
+
+            if (cr->flags & EcsIdSingleton) {
+                if (default_src) {
+                    term->src.id = term->first.id|EcsSelf|EcsIsEntity;
+
+                    ECS_BIT_CLEAR16(term->flags_, EcsTermIsTrivial);
+                    if (term->flags_ & EcsTermIsCacheable) {
+                        cacheable_terms --;
+                        ECS_BIT_CLEAR16(term->flags_, EcsTermIsCacheable);
+                    }
+                }
+            }
+
+            /* If this is a static field, we need to assume that we might have 
+             * to do change detection. */
+            if (term->src.id & EcsIsEntity) {
+                cr->flags |= EcsIdHasOnSet;
+                if (term->id < FLECS_HI_COMPONENT_ID) {
+                    world->non_trivial_set[term->id] = true;
+                }
+            }
+        } else {
+            ecs_entity_t type = ecs_get_typeid(world, term->id);
+            if (type && ecs_has_id(world, type, EcsSparse)) {
+                is_sparse = true;
+            }
+        }
+
         if (ECS_TERM_REF_ID(&term->src) && (term->src.id & EcsIsEntity)) {
             ECS_TERMSET_SET(q->fixed_fields, 1u << term->field_index);
         }
@@ -1304,25 +1343,15 @@ int flecs_query_finalize_terms(
             ECS_TERMSET_SET(q->var_fields, 1u << term->field_index);
         }
 
-        bool is_sparse = false;
-
-        ecs_component_record_t *cr = flecs_components_get(world, term->id);
-        if (cr) {
-            if (ecs_os_has_threading()) {
-                ecs_os_ainc(&cr->keep_alive);
-            } else {
-                cr->keep_alive ++;
+        if (prev_is_or) {
+            if (ECS_TERM_REF_ID(&term[-1].src) != ECS_TERM_REF_ID(&term->src)) {
+                flecs_query_validator_error(&ctx, "mismatching src.id for OR terms");
+                return -1;
             }
-
-            term->flags_ |= EcsTermKeepAlive;
-
-            if (cr->flags & EcsIdIsSparse) {
-                is_sparse = true;
-            }
-        } else {
-            ecs_entity_t type = ecs_get_typeid(world, term->id);
-            if (type && ecs_has_id(world, type, EcsSparse)) {
-                is_sparse = true;
+            if (term->oper != EcsOr && term->oper != EcsAnd) {
+                flecs_query_validator_error(&ctx, 
+                    "term after OR operator must use AND operator");
+                return -1;
             }
         }
 
@@ -1649,6 +1678,7 @@ bool flecs_query_finalize_simple(
         }
 
         bool is_self = term->src.id == EcsSelf;
+        bool default_src = term->src.id == 0;
 
         term->field_index = i;
         term->first.id = first | EcsIsEntity | EcsSelf;
@@ -1695,6 +1725,13 @@ bool flecs_query_finalize_simple(
                 term->flags_ |= EcsTermIsSparse;
                 cacheable = false; trivial = false;
                 q->row_fields |= flecs_uto(uint32_t, 1llu << i);
+            }
+
+            if (cr->flags & EcsIdSingleton) {
+                if (default_src) {
+                    term->src.id = term->first.id|EcsSelf|EcsIsEntity;
+                    cacheable = false; trivial = false;
+                }
             }
         }
 

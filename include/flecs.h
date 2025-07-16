@@ -254,7 +254,11 @@
  * Increasing this value increases the size of the lookup array, which allows
  * fast table traversal, which improves performance of ECS add/remove
  * operations. Component ids that fall outside of this range use a regular map
- * lookup, which is slower but more memory efficient. */
+ * lookup, which is slower but more memory efficient. 
+ * 
+ * This value must be set to a value that is a power of 2. Setting it to a value
+ * that is not a power of two will degrade performance.
+ */
 #ifndef FLECS_HI_COMPONENT_ID
 #define FLECS_HI_COMPONENT_ID (256)
 #endif
@@ -972,6 +976,12 @@ struct ecs_type_hooks_t {
      * destructor is invoked. */
     ecs_iter_action_t on_remove;
 
+    /** Callback that is invoked with the existing and new value before the
+     * value is assigned. Invoked after on_add and before on_set. Registering
+     * an on_replace hook prevents using operations that return a mutable 
+     * pointer to the component like get_mut, ensure and emplace. */
+    ecs_iter_action_t on_replace;
+
     void *ctx;                         /**< User defined context */
     void *binding_ctx;                 /**< Language binding context */
     void *lifecycle_ctx;               /**< Component lifecycle context (see meta add-on)*/
@@ -1642,9 +1652,6 @@ FLECS_API extern const ecs_entity_t EcsThis;
 /** Variable entity ("$"). Used in expressions to prefix variable names */
 FLECS_API extern const ecs_entity_t EcsVariable;
 
-/** Shortcut as EcsVariable is typically used as source for singleton terms */
-#define EcsSingleton EcsVariable
-
 /** Marks a relationship as transitive.
  * Behavior:
  *
@@ -1863,6 +1870,10 @@ FLECS_API extern const ecs_entity_t EcsDelete;
 /** Panic cleanup policy. Must be used as target in pair with #EcsOnDelete or
  * #EcsOnDeleteTarget. */
 FLECS_API extern const ecs_entity_t EcsPanic;
+
+/** Mark component as singleton. Singleton components may only be added to 
+ * themselves. */
+FLECS_API extern const ecs_entity_t EcsSingleton;
 
 /** Mark component as sparse */
 FLECS_API extern const ecs_entity_t EcsSparse;
@@ -3281,48 +3292,14 @@ FLECS_ALWAYS_INLINE void* ecs_get_mut_id(
  * @param id The entity id of the component to obtain.
  * @return The component pointer.
  *
- * @see ecs_ensure_modified_id()
  * @see ecs_emplace_id()
  */
 FLECS_API
 void* ecs_ensure_id(
     ecs_world_t *world,
     ecs_entity_t entity,
-    ecs_id_t id);
-
-/** Combines ensure + modified in single operation.
- * This operation is a more efficient alternative to calling ecs_ensure_id() and
- * ecs_modified_id() separately. This operation is only valid when the world is in
- * deferred mode, which ensures that the Modified event is not emitted before
- * the modification takes place.
- *
- * @param world The world.
- * @param entity The entity.
- * @param id The id of the component to obtain.
- * @return The component pointer.
- */
-FLECS_API
-void* ecs_ensure_modified_id(
-    ecs_world_t *world,
-    ecs_entity_t entity,
-    ecs_id_t id);
-
-/** Combines get_mut + modified in single operation.
- * This operation is a more efficient alternative to calling ecs_get_mut_id() and
- * ecs_modified_id() separately. This operation is only valid when the world is in
- * deferred mode, which ensures that the Modified event is not emitted before
- * the modification takes place.
- *
- * @param world The world.
- * @param entity The entity.
- * @param id The id of the component to obtain.
- * @return The component pointer.
- */
-FLECS_API
-void* ecs_get_mut_modified_id(
-    ecs_world_t *world,
-    ecs_entity_t entity,
-    ecs_id_t id);
+    ecs_id_t id,
+    size_t size);
 
 /** Create a component ref.
  * A ref is a handle to an entity + component which caches a small amount of
@@ -3334,7 +3311,7 @@ void* ecs_get_mut_modified_id(
  * @param id The id of the component.
  * @return The reference.
  */
-FLECS_API
+FLECS_ALWAYS_INLINE FLECS_API
 ecs_ref_t ecs_ref_init_id(
     const ecs_world_t *world,
     ecs_entity_t entity,
@@ -3348,7 +3325,7 @@ ecs_ref_t ecs_ref_init_id(
  * @param id The component id.
  * @return The component pointer, NULL if the entity does not have the component.
  */
-FLECS_API
+FLECS_ALWAYS_INLINE FLECS_API
 void* ecs_ref_get_id(
     const ecs_world_t *world,
     ecs_ref_t *ref,
@@ -3361,7 +3338,7 @@ void* ecs_ref_get_id(
  * @param world The world.
  * @param ref The ref.
  */
-FLECS_API
+FLECS_ALWAYS_INLINE FLECS_API
 void ecs_ref_update(
     const ecs_world_t *world,
     ecs_ref_t *ref);
@@ -3382,6 +3359,7 @@ void ecs_ref_update(
  * @param world The world.
  * @param entity The entity.
  * @param id The component to obtain.
+ * @param size The component size.
  * @param is_new Whether this is an existing or new component.
  * @return The (uninitialized) component pointer.
  */
@@ -3390,6 +3368,7 @@ void* ecs_emplace_id(
     ecs_world_t *world,
     ecs_entity_t entity,
     ecs_id_t id,
+    size_t size,
     bool *is_new);
 
 /** Signal that a component has been modified.
@@ -3440,22 +3419,23 @@ void ecs_set_id(
  */
 
 /** Test whether an entity is valid.
- * Entities that are valid can be used with API functions. Using invalid
- * entities with API operations will cause the function to panic.
- *
- * An entity is valid if it is not 0 and if it is alive.
- *
- * ecs_is_valid() will return true for ids that don't exist (alive or not alive). This
- * allows for using ids that have never been created by ecs_new_w() or similar. In
- * this the function differs from ecs_is_alive(), which will return false for
- * entities that do not yet exist.
- *
- * The operation will return false for an id that exists and is not alive, as
- * using this id with an API operation would cause it to assert.
+ * This operation tests whether the entity id:
+ * - is not 0
+ * - has a valid bit pattern
+ * - is alive (see ecs_is_alive())
+ * 
+ * If this operation returns true, it is safe to use the entity with other
+ * other operations.
+ * 
+ * This operation should only be used if an application cannot be sure that an
+ * entity is initialized with a valid value. In all other cases where an entity
+ * was initialized with a valid value, but the application wants to check if the
+ * entity is (still) alive, use ecs_is_alive.
  *
  * @param world The world.
  * @param e The entity.
  * @return True if the entity is valid, false if the entity is not valid.
+ * @see ecs_is_alive()
  */
 FLECS_API
 bool ecs_is_valid(
@@ -3465,8 +3445,8 @@ bool ecs_is_valid(
 /** Test whether an entity is alive.
  * Entities are alive after they are created, and become not alive when they are
  * deleted. Operations that return alive ids are (amongst others) ecs_new(),
- * ecs_new_low_id() and ecs_entity_init(). Ids can be made alive with the ecs_make_alive()
- * function.
+ * ecs_new_low_id() and ecs_entity_init(). Ids can be made alive with the 
+ * ecs_make_alive() * function.
  *
  * After an id is deleted it can be recycled. Recycled ids are different from
  * the original id in that they have a different generation count. This makes it
@@ -3482,10 +3462,14 @@ bool ecs_is_valid(
  * ecs_is_alive(world, e2);             // true
  * ecs_is_alive(world, e1);             // false
  * @endcode
+ * 
+ * Other than ecs_is_valid(), this operation will panic if the passed in entity
+ * id is 0 or has an invalid bit pattern.
  *
  * @param world The world.
  * @param e The entity.
  * @return True if the entity is alive, false if the entity is not alive.
+ * @see ecs_is_valid()
  */
 FLECS_API
 bool ecs_is_alive(
@@ -5962,6 +5946,17 @@ FLECS_API
 bool ecs_table_has_flags(
     ecs_table_t *table,
     ecs_flags32_t flags);
+
+/** Check if table has traversable entities.
+ * Traversable entities are entities that are used as target in a pair with a
+ * relationship that has the Traversable trait.
+ * 
+ * @param table The table.
+ * @return Whether the table has traversable entities.
+ */
+FLECS_API
+bool ecs_table_has_traversable(
+    const ecs_table_t *table);
 
 /** Swaps two elements inside the table. This is useful for implementing custom
  * table sorting algorithms.
