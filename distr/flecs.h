@@ -21908,20 +21908,9 @@ inline uint32_t get_generation(flecs::entity_t e) {
 struct scoped_world;
 
 
-// Concepts to constrain and optimize template instantiation
-template<typename T>
-concept IsFlecsSingleton = requires { 
-    typename T::type;
-    T::is_singleton; 
-    T::is_optional;
-	T::is_parent;
-	T::is_second;
-} && T::is_singleton;
-
 template<typename T>
 concept IsFlecsOptional = requires { 
     typename T::type;
-    T::is_singleton; 
     T::is_optional;
 	T::is_parent;
 	T::is_second;
@@ -21930,7 +21919,6 @@ concept IsFlecsOptional = requires {
 template<typename T>
 concept IsFlecsParent = requires { 
     typename T::type;
-    T::is_singleton; 
     T::is_optional;
 	T::is_parent;
 	T::is_second;
@@ -21939,7 +21927,6 @@ concept IsFlecsParent = requires {
 template<typename T>
 concept IsFlecsSecond = requires { 
     typename T::type;
-    T::is_singleton; 
     T::is_optional;
 	T::is_parent;
 	T::is_second;
@@ -21948,38 +21935,17 @@ concept IsFlecsSecond = requires {
 template<typename T>
 concept IsFlecsWrapper = requires {
     typename T::type;
-    T::is_singleton;
     T::is_optional;
 	T::is_parent;
 	T::is_second;
-} && (T::is_singleton || T::is_optional || T::is_parent || T::is_second);
+} && (T::is_optional || T::is_parent || T::is_second);
 
 template<typename T>
 concept IsPlainComponent = !IsFlecsWrapper<T>;
 
-// Lightweight wrapper types
-template<typename T>
-struct singleton_t {
-    using type = T;
-    static constexpr bool is_singleton = true;
-    static constexpr bool is_optional = false;
-	static constexpr bool is_parent = false;
-	static constexpr bool is_second = false;
-};
-
 template<typename T>
 struct optional_t {
     using type = T;
-    static constexpr bool is_singleton = false;
-    static constexpr bool is_optional = true;
-	static constexpr bool is_parent = false;
-	static constexpr bool is_second = false;
-};
-
-template<typename T>
-struct singleton_optional_t {
-    using type = T;
-    static constexpr bool is_singleton = true;
     static constexpr bool is_optional = true;
 	static constexpr bool is_parent = false;
 	static constexpr bool is_second = false;
@@ -21988,7 +21954,6 @@ struct singleton_optional_t {
 template<typename T>
 struct parent_t {
     using type = T;
-    static constexpr bool is_singleton = false;
     static constexpr bool is_optional = false;
 	static constexpr bool is_parent = true;
 	static constexpr bool is_second = false;
@@ -21997,7 +21962,6 @@ struct parent_t {
 template<typename T>
 struct parent_optional_t {
     using type = T;
-    static constexpr bool is_singleton = false;
     static constexpr bool is_optional = true;
 	static constexpr bool is_parent = true;
 	static constexpr bool is_second = false;
@@ -22007,7 +21971,6 @@ template<typename T0, typename T1>
 struct second_t {
     using type = T0;
 	using second_type = T1;
-    static constexpr bool is_singleton = false;
     static constexpr bool is_optional = false;
 	static constexpr bool is_parent = false;
 	static constexpr bool is_second = true;
@@ -22017,7 +21980,6 @@ template<typename T0, typename T1>
 struct parent_second_t {
     using type = T0;
 	using second_type = T1;
-    static constexpr bool is_singleton = false;
     static constexpr bool is_optional = false;
 	static constexpr bool is_parent = true;
 	static constexpr bool is_second = true;
@@ -31917,45 +31879,6 @@ struct query_builder_i : term_builder_i<Base> {
     }
 
     /* With methods */
-
-	template<typename T>
-    Base& with_singleton() {
-        this->term();
-        *this->term_ = flecs::term(_::type<T>::id(this->world_v()));
-        this->term_->inout = static_cast<ecs_inout_kind_t>(
-            _::type_to_inout<T>());
-        
-        flecs::id_t sid = this->term_->id;
-        if (!sid) {
-            sid = this->term_->first.id;
-        }
-
-        ecs_assert(sid != 0, ECS_INVALID_PARAMETER, NULL);
-
-        if (!ECS_IS_PAIR(sid)) {
-            this->term_->src.id = sid;
-        } else {
-           this->term_->src.id = ecs_pair_first(this->world_v(), sid);
-        }
-        return *this;
-    }
-
-    template <typename T>
-    Base& without_singleton() {
-		this->with<T>().not_();
-		flecs::id_t sid = this->term_->id;
-        if (!sid) {
-            sid = this->term_->first.id;
-        }
-        ecs_assert(sid != 0, ECS_INVALID_PARAMETER, NULL);
-        if (!ECS_IS_PAIR(sid)) {
-            this->term_->src.id = sid;
-        } else {
-           this->term_->src.id = ecs_pair_first(this->world_v(), sid);
-        }
-        return *this;
-    }
-
     template<typename T>
     Base& with() {
         this->term();
@@ -32035,25 +31958,6 @@ struct query_builder_i : term_builder_i<Base> {
         return *this;
     }
 	
-	template <typename T>
-    Base& term_singleton() {
-        flecs::id_t term_id = _::type<T>::id(this->world_v());
-        for (int i = 0; i < term_index_; i ++) {
-            ecs_term_t& cur_term = desc_->terms[i];
-            ecs_id_t cur_term_id = cur_term.id;
-            ecs_id_t cur_term_pair = ecs_pair(cur_term.first.id, cur_term.second.id);
-
-            if ((term_id == cur_term_id || (cur_term_id != 0 && term_id == ecs_get_typeid(this->world_v(), cur_term_id))) ||
-                (term_id == cur_term_pair || (cur_term_pair != 0 && term_id == ecs_get_typeid(this->world_v(), cur_term_pair)))) {
-                return term_at(i).singleton();
-            }
-        }
-
-		assert(false && "");
-        ecs_err("term not found");
-        return *this;
-    }
-
     /* Without methods, shorthand for .with(...).not_(). */
 
     template <typename ... Args>
@@ -33598,10 +33502,6 @@ inline flecs::system_builder<unwrap_type_t<Comps>...> world::system(Args &&... a
 	auto configure_one = [&term_index, &builder](auto* component_type) {
     	using T = std::remove_pointer_t<decltype(component_type)>;
 		using T1 = second_type_t<T>;
-
-   		if constexpr (IsFlecsSingleton<T>) {
-   		    builder.term_at(term_index).singleton();
-   		}
    		if constexpr (IsFlecsOptional<T>) {
    		    builder.term_at(term_index).optional();
    		}
