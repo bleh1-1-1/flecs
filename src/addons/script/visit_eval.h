@@ -67,11 +67,11 @@ void flecs_script_eval_visit_fini(
     const ecs_script_eval_desc_t *desc);
 
 int flecs_script_eval_node(
-    ecs_script_eval_visitor_t *v,
+    ecs_script_visit_t *v,
     ecs_script_node_t *node);
 
 int flecs_script_check_node(
-    ecs_script_eval_visitor_t *v,
+    ecs_script_visit_t *v,
     ecs_script_node_t *node);
 
 int flecs_script_check_scope(
@@ -95,7 +95,8 @@ int flecs_script_eval_using(
 
 int flecs_script_eval_const(
     ecs_script_eval_visitor_t *v,
-    ecs_script_var_node_t *node);
+    ecs_script_var_node_t *node,
+    bool export);
 
 ecs_entity_t flecs_script_find_entity_action(
     const ecs_world_t *world,

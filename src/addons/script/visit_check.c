@@ -338,7 +338,7 @@ int flecs_script_check_const(
     ecs_script_eval_visitor_t *v,
     ecs_script_var_node_t *node)
 {
-    return flecs_script_eval_const(v, node);
+    return flecs_script_eval_const(v, node, false);
 }
 
 static
@@ -444,9 +444,10 @@ int flecs_script_check_annot(
 }
 
 int flecs_script_check_node(
-    ecs_script_eval_visitor_t *v,
+    ecs_script_visit_t *_v,
     ecs_script_node_t *node)
 {
+    ecs_script_eval_visitor_t *v = (ecs_script_eval_visitor_t*)_v;
     switch(node->kind) {
     case EcsAstScope:
         return flecs_script_check_scope(
@@ -490,6 +491,8 @@ int flecs_script_check_node(
     case EcsAstConst:
         return flecs_script_check_const(
             v, (ecs_script_var_node_t*)node);
+    case EcsAstExportConst:
+        return 0;
     case EcsAstEntity:
         return flecs_script_check_entity(
             v, (ecs_script_entity_t*)node);
