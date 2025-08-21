@@ -368,6 +368,9 @@ void Entity_defer_on_replace_w_assign_existing(void);
 void Entity_defer_on_replace_w_assign_existing_twice(void);
 void Entity_defer_on_replace_w_assign_batched_existing(void);
 void Entity_defer_on_replace_w_assign_batched_existing_twice(void);
+void Entity_set_lvalue_to_mutable(void);
+void Entity_set_lvalue_to_const(void);
+void Entity_set_rvalue(void);
 
 // Testsuite 'OrderedChildren'
 void OrderedChildren_iter_no_children(void);
@@ -1583,6 +1586,8 @@ void Meta_iter_to_json(void);
 void Meta_query_to_json(void);
 void Meta_entity_to_json_w_default_desc(void);
 void Meta_query_to_json_w_default_desc(void);
+void Meta_script_to_std_vector_int(void);
+void Meta_script_to_std_vector_std_string(void);
 
 // Testsuite 'Table'
 void Table_each(void);
@@ -3065,6 +3070,18 @@ bake_test_case Entity_testcases[] = {
     {
         "defer_on_replace_w_assign_batched_existing_twice",
         Entity_defer_on_replace_w_assign_batched_existing_twice
+    },
+    {
+        "set_lvalue_to_mutable",
+        Entity_set_lvalue_to_mutable
+    },
+    {
+        "set_lvalue_to_const",
+        Entity_set_lvalue_to_const
+    },
+    {
+        "set_rvalue",
+        Entity_set_rvalue
     }
 };
 
@@ -7812,6 +7829,14 @@ bake_test_case Meta_testcases[] = {
     {
         "query_to_json_w_default_desc",
         Meta_query_to_json_w_default_desc
+    },
+    {
+        "script_to_std_vector_int",
+        Meta_script_to_std_vector_int
+    },
+    {
+        "script_to_std_vector_std_string",
+        Meta_script_to_std_vector_std_string
     }
 };
 
@@ -8022,7 +8047,7 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        355,
+        358,
         Entity_testcases
     },
     {
@@ -8171,7 +8196,7 @@ static bake_test_suite suites[] = {
         "Meta",
         NULL,
         NULL,
-        63,
+        65,
         Meta_testcases
     },
     {
