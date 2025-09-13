@@ -388,6 +388,8 @@ void New_w_Count_recycle_1_of_3(void);
 void New_w_Count_recycle_2_of_3(void);
 void New_w_Count_bulk_init_w_table(void);
 void New_w_Count_bulk_init_w_alive_entity(void);
+void New_w_Count_bulk_init_w_cmd_in_on_add_hook(void);
+void New_w_Count_bulk_init_w_cmd_in_on_add_observer(void);
 
 // Testsuite 'Add'
 void Add_zero(void);
@@ -557,8 +559,6 @@ void Sparse_target_2_pairs(void);
 void Sparse_target_exclusive_pair(void);
 void Sparse_target_exclusive_pair_after_change(void);
 void Sparse_target_exclusive_pair_after_add_same(void);
-void Sparse_target_recycled(void);
-void Sparse_target_recycled_exclusive(void);
 void Sparse_target_from_base(void);
 void Sparse_target_for_base(void);
 void Sparse_target_for_self_sparse_component(void);
@@ -614,6 +614,18 @@ void Sparse_delete_relationship(void);
 void Sparse_delete_parent_of_relationship(void);
 void Sparse_delete_exclusive_relationship(void);
 void Sparse_delete_parent_of_exclusive_relationship(void);
+void Sparse_add_before_recycle_non_sparse(void);
+void Sparse_add_before_recycle_sparse(void);
+void Sparse_add_pair_before_recycle_non_sparse_relationship(void);
+void Sparse_add_pair_before_recycle_sparse_relationship(void);
+void Sparse_add_pair_before_recycle_sparse_target(void);
+void Sparse_remove_before_recycle_non_sparse(void);
+void Sparse_remove_before_recycle_sparse(void);
+void Sparse_remove_pair_before_recycle_non_sparse_relationship(void);
+void Sparse_remove_pair_before_recycle_sparse_relationship(void);
+void Sparse_remove_pair_before_recycle_sparse_target(void);
+void Sparse_recycle_after_delete_table(void);
+void Sparse_recycle_pair_after_delete_table(void);
 
 // Testsuite 'Hierarchies'
 void Hierarchies_setup(void);
@@ -834,6 +846,7 @@ void Reference_aba_table(void);
 void Reference_recycled_table(void);
 void Reference_recycled_table_twice(void);
 void Reference_ref_after_shrink(void);
+void Reference_ref_after_shrink_w_freed_pages(void);
 
 // Testsuite 'Delete'
 void Delete_setup(void);
@@ -4149,6 +4162,14 @@ bake_test_case New_w_Count_testcases[] = {
     {
         "bulk_init_w_alive_entity",
         New_w_Count_bulk_init_w_alive_entity
+    },
+    {
+        "bulk_init_w_cmd_in_on_add_hook",
+        New_w_Count_bulk_init_w_cmd_in_on_add_hook
+    },
+    {
+        "bulk_init_w_cmd_in_on_add_observer",
+        New_w_Count_bulk_init_w_cmd_in_on_add_observer
     }
 };
 
@@ -4803,14 +4824,6 @@ bake_test_case Sparse_testcases[] = {
         Sparse_target_exclusive_pair_after_add_same
     },
     {
-        "target_recycled",
-        Sparse_target_recycled
-    },
-    {
-        "target_recycled_exclusive",
-        Sparse_target_recycled_exclusive
-    },
-    {
         "target_from_base",
         Sparse_target_from_base
     },
@@ -5029,6 +5042,54 @@ bake_test_case Sparse_testcases[] = {
     {
         "delete_parent_of_exclusive_relationship",
         Sparse_delete_parent_of_exclusive_relationship
+    },
+    {
+        "add_before_recycle_non_sparse",
+        Sparse_add_before_recycle_non_sparse
+    },
+    {
+        "add_before_recycle_sparse",
+        Sparse_add_before_recycle_sparse
+    },
+    {
+        "add_pair_before_recycle_non_sparse_relationship",
+        Sparse_add_pair_before_recycle_non_sparse_relationship
+    },
+    {
+        "add_pair_before_recycle_sparse_relationship",
+        Sparse_add_pair_before_recycle_sparse_relationship
+    },
+    {
+        "add_pair_before_recycle_sparse_target",
+        Sparse_add_pair_before_recycle_sparse_target
+    },
+    {
+        "remove_before_recycle_non_sparse",
+        Sparse_remove_before_recycle_non_sparse
+    },
+    {
+        "remove_before_recycle_sparse",
+        Sparse_remove_before_recycle_sparse
+    },
+    {
+        "remove_pair_before_recycle_non_sparse_relationship",
+        Sparse_remove_pair_before_recycle_non_sparse_relationship
+    },
+    {
+        "remove_pair_before_recycle_sparse_relationship",
+        Sparse_remove_pair_before_recycle_sparse_relationship
+    },
+    {
+        "remove_pair_before_recycle_sparse_target",
+        Sparse_remove_pair_before_recycle_sparse_target
+    },
+    {
+        "recycle_after_delete_table",
+        Sparse_recycle_after_delete_table
+    },
+    {
+        "recycle_pair_after_delete_table",
+        Sparse_recycle_pair_after_delete_table
     }
 };
 
@@ -5867,6 +5928,10 @@ bake_test_case Reference_testcases[] = {
     {
         "ref_after_shrink",
         Reference_ref_after_shrink
+    },
+    {
+        "ref_after_shrink_w_freed_pages",
+        Reference_ref_after_shrink_w_freed_pages
     }
 };
 
@@ -13088,7 +13153,7 @@ static bake_test_suite suites[] = {
         "New_w_Count",
         NULL,
         NULL,
-        23,
+        25,
         New_w_Count_testcases
     },
     {
@@ -13116,7 +13181,7 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        168,
+        178,
         Sparse_testcases,
         1,
         Sparse_params
@@ -13160,7 +13225,7 @@ static bake_test_suite suites[] = {
         "Reference",
         Reference_setup,
         NULL,
-        23,
+        24,
         Reference_testcases
     },
     {
