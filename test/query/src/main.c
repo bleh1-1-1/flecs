@@ -159,6 +159,17 @@ void Validator_validate_or_term_w_singleton_trait(void);
 void Validator_validate_term_w_singleton_trait_w_explicit_src(void);
 void Validator_validate_term_w_singleton_trait_w_explicit_self_src(void);
 void Validator_validate_term_w_singleton_trait_w_pair_w_explicit_self_src(void);
+void Validator_validator_1_singleton_terms_match_this(void);
+void Validator_validator_2_singleton_terms_match_this(void);
+void Validator_validator_2_singleton_terms_match_this_w_in(void);
+void Validator_validator_2_terms_1_singleton_match_this(void);
+void Validator_validator_1_fixed_src_terms_match_this(void);
+void Validator_validator_2_fixed_src_terms_match_this(void);
+void Validator_validator_2_terms_1_fixed_src_match_this(void);
+void Validator_validator_1_var_src_terms_match_this(void);
+void Validator_validator_2_var_src_terms_match_this(void);
+void Validator_validator_2_terms_1_var_src_match_this(void);
+void Validator_validator_1_tag_term_this_src_match_this(void);
 
 // Testsuite 'Parser'
 void Parser_resolve_this(void);
@@ -2194,6 +2205,14 @@ void DontFragment_this_written_tgt_var_w_component(void);
 void DontFragment_this_written_sparse_any(void);
 void DontFragment_this_written_sparse_exclusive_any(void);
 void DontFragment_add_to_self_while_iterate(void);
+void DontFragment_this_sparse_recycled(void);
+void DontFragment_this_sparse_pair_recycled(void);
+void DontFragment_this_sparse_wildcard_pair_recycled(void);
+void DontFragment_this_sparse_any_pair_recycled(void);
+void DontFragment_this_written_sparse_recycled(void);
+void DontFragment_this_written_sparse_pair_recycled(void);
+void DontFragment_this_written_sparse_wildcard_pair_recycled(void);
+void DontFragment_this_written_sparse_any_pair_recycled(void);
 
 // Testsuite 'OrderBy'
 void OrderBy_sort_by_component(void);
@@ -2938,6 +2957,50 @@ bake_test_case Validator_testcases[] = {
     {
         "validate_term_w_singleton_trait_w_pair_w_explicit_self_src",
         Validator_validate_term_w_singleton_trait_w_pair_w_explicit_self_src
+    },
+    {
+        "validator_1_singleton_terms_match_this",
+        Validator_validator_1_singleton_terms_match_this
+    },
+    {
+        "validator_2_singleton_terms_match_this",
+        Validator_validator_2_singleton_terms_match_this
+    },
+    {
+        "validator_2_singleton_terms_match_this_w_in",
+        Validator_validator_2_singleton_terms_match_this_w_in
+    },
+    {
+        "validator_2_terms_1_singleton_match_this",
+        Validator_validator_2_terms_1_singleton_match_this
+    },
+    {
+        "validator_1_fixed_src_terms_match_this",
+        Validator_validator_1_fixed_src_terms_match_this
+    },
+    {
+        "validator_2_fixed_src_terms_match_this",
+        Validator_validator_2_fixed_src_terms_match_this
+    },
+    {
+        "validator_2_terms_1_fixed_src_match_this",
+        Validator_validator_2_terms_1_fixed_src_match_this
+    },
+    {
+        "validator_1_var_src_terms_match_this",
+        Validator_validator_1_var_src_terms_match_this
+    },
+    {
+        "validator_2_var_src_terms_match_this",
+        Validator_validator_2_var_src_terms_match_this
+    },
+    {
+        "validator_2_terms_1_var_src_match_this",
+        Validator_validator_2_terms_1_var_src_match_this
+    },
+    {
+        "validator_1_tag_term_this_src_match_this",
+        Validator_validator_1_tag_term_this_src_match_this
     }
 };
 
@@ -10921,6 +10984,38 @@ bake_test_case DontFragment_testcases[] = {
     {
         "add_to_self_while_iterate",
         DontFragment_add_to_self_while_iterate
+    },
+    {
+        "this_sparse_recycled",
+        DontFragment_this_sparse_recycled
+    },
+    {
+        "this_sparse_pair_recycled",
+        DontFragment_this_sparse_pair_recycled
+    },
+    {
+        "this_sparse_wildcard_pair_recycled",
+        DontFragment_this_sparse_wildcard_pair_recycled
+    },
+    {
+        "this_sparse_any_pair_recycled",
+        DontFragment_this_sparse_any_pair_recycled
+    },
+    {
+        "this_written_sparse_recycled",
+        DontFragment_this_written_sparse_recycled
+    },
+    {
+        "this_written_sparse_pair_recycled",
+        DontFragment_this_written_sparse_pair_recycled
+    },
+    {
+        "this_written_sparse_wildcard_pair_recycled",
+        DontFragment_this_written_sparse_wildcard_pair_recycled
+    },
+    {
+        "this_written_sparse_any_pair_recycled",
+        DontFragment_this_written_sparse_any_pair_recycled
     }
 };
 
@@ -11538,7 +11633,7 @@ static bake_test_suite suites[] = {
         "Validator",
         NULL,
         NULL,
-        150,
+        161,
         Validator_testcases
     },
     {
@@ -11709,7 +11804,7 @@ static bake_test_suite suites[] = {
         "DontFragment",
         DontFragment_setup,
         NULL,
-        119,
+        127,
         DontFragment_testcases,
         1,
         DontFragment_params

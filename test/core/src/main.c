@@ -626,6 +626,7 @@ void Sparse_remove_pair_before_recycle_sparse_relationship(void);
 void Sparse_remove_pair_before_recycle_sparse_target(void);
 void Sparse_recycle_after_delete_table(void);
 void Sparse_recycle_pair_after_delete_table(void);
+void Sparse_add_sparse_pair_to_recycled(void);
 
 // Testsuite 'Hierarchies'
 void Hierarchies_setup(void);
@@ -1796,6 +1797,9 @@ void Observer_1_term_on_set_yield_existing_is_set(void);
 void Observer_2_terms_on_add_yield_existing_is_set(void);
 void Observer_2_terms_on_add_yield_existing_is_set_component(void);
 void Observer_2_terms_on_set_yield_existing_is_set(void);
+void Observer_2_singleton_terms_on_add(void);
+void Observer_2_singleton_terms_on_remove(void);
+void Observer_2_singleton_terms_on_set(void);
 void Observer_cache_test_1(void);
 void Observer_cache_test_2(void);
 void Observer_cache_test_3(void);
@@ -2177,6 +2181,7 @@ void World_init_shrink_twice_fini(void);
 void World_init_create_delete_entities_shrink_fini(void);
 void World_init_create_delete_random_1_entities_shrink_fini(void);
 void World_init_create_delete_random_2_entities_shrink_fini(void);
+void World_recreate_tables_after_shrink(void);
 void World_mini_all_tables_builtin(void);
 void World_mini_all_tables_builtin_after_add(void);
 void World_user_component_not_builtin(void);
@@ -2195,6 +2200,19 @@ void World_rename_flecs(void);
 void World_reparent_flecs_core(void);
 void World_rename_flecs_core(void);
 void World_user_entity_w_flecs_parent(void);
+void World_add_exclusive_after_query(void);
+void World_add_with_after_query(void);
+void World_add_final_after_query(void);
+void World_add_isa_after_query(void);
+void World_add_isa_after_query_tgt(void);
+void World_add_inheritable_after_query(void);
+void World_add_isa_after_query_after_inheritable(void);
+void World_add_isa_after_query_after_isa(void);
+void World_add_on_instantiate_inherit_after_query(void);
+void World_add_sparse_after_query(void);
+void World_add_dont_fragment_after_query(void);
+void World_add_can_toggle_after_query(void);
+void World_add_traversable_after_query(void);
 
 // Testsuite 'ExclusiveAccess'
 void ExclusiveAccess_self(void);
@@ -5090,6 +5108,10 @@ bake_test_case Sparse_testcases[] = {
     {
         "recycle_pair_after_delete_table",
         Sparse_recycle_pair_after_delete_table
+    },
+    {
+        "add_sparse_pair_to_recycled",
+        Sparse_add_sparse_pair_to_recycled
     }
 };
 
@@ -9663,6 +9685,18 @@ bake_test_case Observer_testcases[] = {
         Observer_2_terms_on_set_yield_existing_is_set
     },
     {
+        "2_singleton_terms_on_add",
+        Observer_2_singleton_terms_on_add
+    },
+    {
+        "2_singleton_terms_on_remove",
+        Observer_2_singleton_terms_on_remove
+    },
+    {
+        "2_singleton_terms_on_set",
+        Observer_2_singleton_terms_on_set
+    },
+    {
         "cache_test_1",
         Observer_cache_test_1
     },
@@ -11140,6 +11174,10 @@ bake_test_case World_testcases[] = {
         World_init_create_delete_random_2_entities_shrink_fini
     },
     {
+        "recreate_tables_after_shrink",
+        World_recreate_tables_after_shrink
+    },
+    {
         "mini_all_tables_builtin",
         World_mini_all_tables_builtin
     },
@@ -11210,6 +11248,58 @@ bake_test_case World_testcases[] = {
     {
         "user_entity_w_flecs_parent",
         World_user_entity_w_flecs_parent
+    },
+    {
+        "add_exclusive_after_query",
+        World_add_exclusive_after_query
+    },
+    {
+        "add_with_after_query",
+        World_add_with_after_query
+    },
+    {
+        "add_final_after_query",
+        World_add_final_after_query
+    },
+    {
+        "add_isa_after_query",
+        World_add_isa_after_query
+    },
+    {
+        "add_isa_after_query_tgt",
+        World_add_isa_after_query_tgt
+    },
+    {
+        "add_inheritable_after_query",
+        World_add_inheritable_after_query
+    },
+    {
+        "add_isa_after_query_after_inheritable",
+        World_add_isa_after_query_after_inheritable
+    },
+    {
+        "add_isa_after_query_after_isa",
+        World_add_isa_after_query_after_isa
+    },
+    {
+        "add_on_instantiate_inherit_after_query",
+        World_add_on_instantiate_inherit_after_query
+    },
+    {
+        "add_sparse_after_query",
+        World_add_sparse_after_query
+    },
+    {
+        "add_dont_fragment_after_query",
+        World_add_dont_fragment_after_query
+    },
+    {
+        "add_can_toggle_after_query",
+        World_add_can_toggle_after_query
+    },
+    {
+        "add_traversable_after_query",
+        World_add_traversable_after_query
     }
 };
 
@@ -13181,7 +13271,7 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        178,
+        179,
         Sparse_testcases,
         1,
         Sparse_params
@@ -13302,7 +13392,7 @@ static bake_test_suite suites[] = {
         "Observer",
         NULL,
         NULL,
-        266,
+        269,
         Observer_testcases
     },
     {
@@ -13351,7 +13441,7 @@ static bake_test_suite suites[] = {
         "World",
         World_setup,
         NULL,
-        93,
+        107,
         World_testcases
     },
     {

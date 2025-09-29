@@ -655,7 +655,8 @@
                 "remove_pair_before_recycle_sparse_relationship",
                 "remove_pair_before_recycle_sparse_target",
                 "recycle_after_delete_table",
-                "recycle_pair_after_delete_table"
+                "recycle_pair_after_delete_table",
+                "add_sparse_pair_to_recycled"
             ]
         }, {
             "id": "Hierarchies",
@@ -1861,6 +1862,9 @@
                 "2_terms_on_add_yield_existing_is_set",
                 "2_terms_on_add_yield_existing_is_set_component",
                 "2_terms_on_set_yield_existing_is_set",
+                "2_singleton_terms_on_add",
+                "2_singleton_terms_on_remove",
+                "2_singleton_terms_on_set",
                 "cache_test_1",
                 "cache_test_2",
                 "cache_test_3",
@@ -2256,6 +2260,7 @@
                 "init_create_delete_entities_shrink_fini",
                 "init_create_delete_random_1_entities_shrink_fini",
                 "init_create_delete_random_2_entities_shrink_fini",
+                "recreate_tables_after_shrink",
                 "mini_all_tables_builtin",
                 "mini_all_tables_builtin_after_add",
                 "user_component_not_builtin",
@@ -2273,7 +2278,20 @@
                 "rename_flecs",
                 "reparent_flecs_core",
                 "rename_flecs_core",
-                "user_entity_w_flecs_parent"
+                "user_entity_w_flecs_parent",
+                "add_exclusive_after_query",
+                "add_with_after_query",
+                "add_final_after_query",
+                "add_isa_after_query",
+                "add_isa_after_query_tgt",
+                "add_inheritable_after_query",
+                "add_isa_after_query_after_inheritable",
+                "add_isa_after_query_after_isa",
+                "add_on_instantiate_inherit_after_query",
+                "add_sparse_after_query",
+                "add_dont_fragment_after_query",
+                "add_can_toggle_after_query",
+                "add_traversable_after_query"
             ]
         }, {
             "id": "ExclusiveAccess",
