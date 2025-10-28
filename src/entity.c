@@ -476,6 +476,7 @@ void flecs_add_id(
     ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_table_diff_t diff = ECS_TABLE_DIFF_INIT;
     ecs_table_t *src_table = r->table;
+
     ecs_table_t *dst_table = flecs_table_traverse_add(
         world, src_table, &component, &diff);
 
@@ -1703,9 +1704,6 @@ void ecs_delete(
                 flecs_table_traversable_add(r->table, -1);
             }
 
-            /* Remove non-fragmenting components */
-            flecs_entity_remove_non_fragmenting(world, entity, r);
-
             /* Merge operations before deleting entity */
             flecs_defer_end(world, stage);
             flecs_defer_begin(world, stage);
@@ -1722,6 +1720,7 @@ void ecs_delete(
             int32_t row = ECS_RECORD_TO_ROW(r->row);
             flecs_notify_on_remove(
                 world, table, &world->store.root, row, 1, &diff);
+            flecs_entity_remove_non_fragmenting(world, entity, r);
             flecs_table_delete(world, table, row, true);
         }
         
@@ -1869,12 +1868,20 @@ ecs_entity_t ecs_clone(
     if (src_r->row & EcsEntityHasDontFragment) {
         ecs_component_record_t *cur = world->cr_non_fragmenting_head;
         while (cur) {
-            ecs_assert(cur->flags & EcsIdSparse, ECS_INTERNAL_ERROR, NULL);
-            if (cur->sparse) {
-                void *src_ptr = flecs_sparse_get(cur->sparse, 0, src);
-                if (src_ptr) {
-                    ecs_set_id(world, dst, cur->id, 
-                        flecs_ito(size_t, cur->type_info->size), src_ptr);
+            if (!ecs_id_is_wildcard(cur->id)) {
+                ecs_assert(cur->flags & EcsIdSparse, ECS_INTERNAL_ERROR, NULL);
+                if (cur->sparse) {
+                    if (cur->type_info) {
+                        void *src_ptr = flecs_sparse_get(cur->sparse, 0, src);
+                        if (src_ptr) {
+                            ecs_set_id(world, dst, cur->id, 
+                                flecs_ito(size_t, cur->type_info->size), src_ptr);
+                        }
+                    } else {
+                        if (flecs_sparse_has(cur->sparse, src)) {
+                            ecs_add_id(world, dst, cur->id);
+                        }
+                    }
                 }
             }
     
@@ -2992,6 +2999,7 @@ void ecs_make_alive_id(
     ecs_id_t component)
 {
     flecs_poly_assert(world, ecs_world_t);
+
     if (ECS_HAS_ID_FLAG(component, PAIR)) {
         ecs_entity_t r = ECS_PAIR_FIRST(component);
         ecs_entity_t t = ECS_PAIR_SECOND(component);
@@ -3007,7 +3015,7 @@ void ecs_make_alive_id(
         if (flecs_entities_get_alive(world, t) == 0) {
             ecs_assert(!ecs_exists(world, t), ECS_INVALID_PARAMETER,
                 "second element of pair is not alive");
-                ecs_make_alive(world, t);
+            ecs_make_alive(world, t);
         }
     } else {
         ecs_make_alive(world, component & ECS_COMPONENT_MASK);

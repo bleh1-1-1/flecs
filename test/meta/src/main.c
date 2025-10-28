@@ -632,6 +632,7 @@ void DeserializeFromJson_deser_unknown_member(void);
 void DeserializeFromJson_deser_valid_after_unknown_member(void);
 void DeserializeFromJson_deser_unknown_member_w_strict(void);
 void DeserializeFromJson_deser_pretty_printed_identifier_pair(void);
+void DeserializeFromJson_ser_deser_alias(void);
 
 // Testsuite 'SerializeToJson'
 void SerializeToJson_struct_bool(void);
@@ -770,6 +771,9 @@ void SerializeEntityToJson_serialize_toggle(void);
 void SerializeEntityToJson_serialize_toggle_pair(void);
 void SerializeEntityToJson_serialize_null_doc_name(void);
 void SerializeEntityToJson_serialize_base_w_invalid_component(void);
+void SerializeEntityToJson_serialize_w_blacklist(void);
+void SerializeEntityToJson_serialize_w_allow_blacklist(void);
+void SerializeEntityToJson_serialize_w_partial_blacklist(void);
 
 // Testsuite 'SerializeIterToJson'
 void SerializeIterToJson_serialize_1_comps_empty(void);
@@ -3569,6 +3573,10 @@ bake_test_case DeserializeFromJson_testcases[] = {
     {
         "deser_pretty_printed_identifier_pair",
         DeserializeFromJson_deser_pretty_printed_identifier_pair
+    },
+    {
+        "ser_deser_alias",
+        DeserializeFromJson_ser_deser_alias
     }
 };
 
@@ -4111,6 +4119,18 @@ bake_test_case SerializeEntityToJson_testcases[] = {
     {
         "serialize_base_w_invalid_component",
         SerializeEntityToJson_serialize_base_w_invalid_component
+    },
+    {
+        "serialize_w_blacklist",
+        SerializeEntityToJson_serialize_w_blacklist
+    },
+    {
+        "serialize_w_allow_blacklist",
+        SerializeEntityToJson_serialize_w_allow_blacklist
+    },
+    {
+        "serialize_w_partial_blacklist",
+        SerializeEntityToJson_serialize_w_partial_blacklist
     }
 };
 
@@ -5596,7 +5616,7 @@ static bake_test_suite suites[] = {
         "DeserializeFromJson",
         NULL,
         NULL,
-        142,
+        143,
         DeserializeFromJson_testcases
     },
     {
@@ -5610,7 +5630,7 @@ static bake_test_suite suites[] = {
         "SerializeEntityToJson",
         NULL,
         NULL,
-        78,
+        81,
         SerializeEntityToJson_testcases
     },
     {
