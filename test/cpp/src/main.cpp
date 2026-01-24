@@ -95,6 +95,7 @@ void Entity_set_T(void);
 void Entity_set_R_t(void);
 void Entity_set_R_T(void);
 void Entity_set_r_T(void);
+void Entity_set_r_t_generic_no_size(void);
 void Entity_assign_T(void);
 void Entity_assign_R_t(void);
 void Entity_assign_R_T(void);
@@ -157,7 +158,9 @@ void Entity_set_deduced(void);
 void Entity_override(void);
 void Entity_override_id(void);
 void Entity_override_pair(void);
+void Entity_override_pair_second(void);
 void Entity_override_pair_w_tgt_id(void);
+void Entity_override_pair_w_rel_id(void);
 void Entity_override_pair_w_ids(void);
 void Entity_set_override(void);
 void Entity_set_override_lvalue(void);
@@ -376,6 +379,26 @@ void Entity_set_non_copy_assignable(void);
 void Entity_set_non_copy_assignable_w_move_assign(void);
 void Entity_assign_non_copy_assignable(void);
 void Entity_assign_non_copy_assignable_w_move_assign(void);
+void Entity_set_parent(void);
+void Entity_defer_set_parent(void);
+void Entity_set_change_parent(void);
+void Entity_defer_set_change_parent(void);
+void Entity_assign_parent(void);
+void Entity_defer_assign_parent(void);
+void Entity_set_parent_on_stage(void);
+void Entity_assign_parent_on_stage(void);
+void Entity_entity_w_childof(void);
+void Entity_entity_w_childof_w_name(void);
+void Entity_entity_w_childof_w_name_existing_w_name(void);
+void Entity_entity_w_parent(void);
+void Entity_entity_w_parent_w_name(void);
+void Entity_entity_w_parent_w_name_existing_w_name(void);
+void Entity_prefab_w_childof(void);
+void Entity_prefab_w_childof_w_name(void);
+void Entity_prefab_w_childof_w_name_existing_w_name(void);
+void Entity_prefab_w_parent(void);
+void Entity_prefab_w_parent_w_name(void);
+void Entity_prefab_w_parent_w_name_existing_w_name(void);
 
 // Testsuite 'OrderedChildren'
 void OrderedChildren_iter_no_children(void);
@@ -1234,7 +1257,6 @@ void Module_reimport_after_delete(void);
 void Module_component_name_w_module_name(void);
 void Module_delete_module_w_implicit_component_and_system(void);
 void Module_delete_module_w_explicit_component_and_system(void);
-void Module_module_has_singleton(void);
 
 // Testsuite 'ImplicitComponents'
 void ImplicitComponents_add(void);
@@ -1998,6 +2020,10 @@ bake_test_case Entity_testcases[] = {
         Entity_set_r_T
     },
     {
+        "set_r_t_generic_no_size",
+        Entity_set_r_t_generic_no_size
+    },
+    {
         "assign_T",
         Entity_assign_T
     },
@@ -2246,8 +2272,16 @@ bake_test_case Entity_testcases[] = {
         Entity_override_pair
     },
     {
+        "override_pair_second",
+        Entity_override_pair_second
+    },
+    {
         "override_pair_w_tgt_id",
         Entity_override_pair_w_tgt_id
+    },
+    {
+        "override_pair_w_rel_id",
+        Entity_override_pair_w_rel_id
     },
     {
         "override_pair_w_ids",
@@ -3120,6 +3154,86 @@ bake_test_case Entity_testcases[] = {
     {
         "assign_non_copy_assignable_w_move_assign",
         Entity_assign_non_copy_assignable_w_move_assign
+    },
+    {
+        "set_parent",
+        Entity_set_parent
+    },
+    {
+        "defer_set_parent",
+        Entity_defer_set_parent
+    },
+    {
+        "set_change_parent",
+        Entity_set_change_parent
+    },
+    {
+        "defer_set_change_parent",
+        Entity_defer_set_change_parent
+    },
+    {
+        "assign_parent",
+        Entity_assign_parent
+    },
+    {
+        "defer_assign_parent",
+        Entity_defer_assign_parent
+    },
+    {
+        "set_parent_on_stage",
+        Entity_set_parent_on_stage
+    },
+    {
+        "assign_parent_on_stage",
+        Entity_assign_parent_on_stage
+    },
+    {
+        "entity_w_childof",
+        Entity_entity_w_childof
+    },
+    {
+        "entity_w_childof_w_name",
+        Entity_entity_w_childof_w_name
+    },
+    {
+        "entity_w_childof_w_name_existing_w_name",
+        Entity_entity_w_childof_w_name_existing_w_name
+    },
+    {
+        "entity_w_parent",
+        Entity_entity_w_parent
+    },
+    {
+        "entity_w_parent_w_name",
+        Entity_entity_w_parent_w_name
+    },
+    {
+        "entity_w_parent_w_name_existing_w_name",
+        Entity_entity_w_parent_w_name_existing_w_name
+    },
+    {
+        "prefab_w_childof",
+        Entity_prefab_w_childof
+    },
+    {
+        "prefab_w_childof_w_name",
+        Entity_prefab_w_childof_w_name
+    },
+    {
+        "prefab_w_childof_w_name_existing_w_name",
+        Entity_prefab_w_childof_w_name_existing_w_name
+    },
+    {
+        "prefab_w_parent",
+        Entity_prefab_w_parent
+    },
+    {
+        "prefab_w_parent_w_name",
+        Entity_prefab_w_parent_w_name
+    },
+    {
+        "prefab_w_parent_w_name_existing_w_name",
+        Entity_prefab_w_parent_w_name_existing_w_name
     }
 };
 
@@ -6473,10 +6587,6 @@ bake_test_case Module_testcases[] = {
     {
         "delete_module_w_explicit_component_and_system",
         Module_delete_module_w_explicit_component_and_system
-    },
-    {
-        "module_has_singleton",
-        Module_module_has_singleton
     }
 };
 
@@ -8137,7 +8247,7 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        363,
+        386,
         Entity_testcases
     },
     {
@@ -8244,7 +8354,7 @@ static bake_test_suite suites[] = {
         "Module",
         NULL,
         NULL,
-        27,
+        26,
         Module_testcases
     },
     {

@@ -399,6 +399,21 @@ void Eval_vector_string_export_var(void);
 void Eval_vector_struct_export_var(void);
 void Eval_opaque_vector_i32_component(void);
 void Eval_opaque_vector_i32_export_var(void);
+void Eval_pair_after_const_int(void);
+void Eval_pair_after_const_string(void);
+void Eval_pair_after_const_identifier(void);
+void Eval_tree_parent(void);
+void Eval_tree_parent_nested(void);
+void Eval_tree_parent_nested_childof(void);
+void Eval_tree_childof_nested_parent(void);
+void Eval_tree_parent_existing_child(void);
+void Eval_tree_parent_existing_child_2(void);
+void Eval_tree_prefab_override_child(void);
+void Eval_tree_parent_nested_w_if_scope(void);
+void Eval_tree_parent_nested_w_if_else_scope(void);
+void Eval_tree_parent_nested_w_for_scope(void);
+void Eval_tree_parent_nested_w_pair_scope(void);
+void Eval_tree_parent_nested_w_with_scope(void);
 
 // Testsuite 'Template'
 void Template_template_no_scope(void);
@@ -477,6 +492,11 @@ void Template_redefine_nested_template_w_prefab_2(void);
 void Template_redefine_nested_template_w_prefab_3(void);
 void Template_template_w_script_component(void);
 void Template_template_w_script_pair_component(void);
+void Template_template_w_prop_and_pair(void);
+void Template_template_w_name_annotation(void);
+void Template_template_w_name_annotation_update_script(void);
+void Template_template_w_tree_parent(void);
+void Template_template_w_tree_parent_change_value(void);
 
 // Testsuite 'Error'
 void Error_multi_line_comment_after_newline_before_newline_scope_open(void);
@@ -1084,6 +1104,8 @@ void Deserialize_opaque_struct_w_member(void);
 void Deserialize_opaque_struct_w_member_reverse(void);
 void Deserialize_struct_w_opaque_member(void);
 void Deserialize_opaque_string(void);
+void Deserialize_opaque_entity(void);
+void Deserialize_struct_w_opaque_entity_member(void);
 void Deserialize_opaque_vector_i32_0(void);
 void Deserialize_opaque_vector_i32_2(void);
 void Deserialize_opaque_vector_i32_0_into_2(void);
@@ -2673,6 +2695,66 @@ bake_test_case Eval_testcases[] = {
     {
         "opaque_vector_i32_export_var",
         Eval_opaque_vector_i32_export_var
+    },
+    {
+        "pair_after_const_int",
+        Eval_pair_after_const_int
+    },
+    {
+        "pair_after_const_string",
+        Eval_pair_after_const_string
+    },
+    {
+        "pair_after_const_identifier",
+        Eval_pair_after_const_identifier
+    },
+    {
+        "tree_parent",
+        Eval_tree_parent
+    },
+    {
+        "tree_parent_nested",
+        Eval_tree_parent_nested
+    },
+    {
+        "tree_parent_nested_childof",
+        Eval_tree_parent_nested_childof
+    },
+    {
+        "tree_childof_nested_parent",
+        Eval_tree_childof_nested_parent
+    },
+    {
+        "tree_parent_existing_child",
+        Eval_tree_parent_existing_child
+    },
+    {
+        "tree_parent_existing_child_2",
+        Eval_tree_parent_existing_child_2
+    },
+    {
+        "tree_prefab_override_child",
+        Eval_tree_prefab_override_child
+    },
+    {
+        "tree_parent_nested_w_if_scope",
+        Eval_tree_parent_nested_w_if_scope
+    },
+    {
+        "tree_parent_nested_w_if_else_scope",
+        Eval_tree_parent_nested_w_if_else_scope
+    },
+    {
+        "tree_parent_nested_w_for_scope",
+        Eval_tree_parent_nested_w_for_scope
+    },
+    {
+        "tree_parent_nested_w_pair_scope",
+        Eval_tree_parent_nested_w_pair_scope
+    },
+    {
+        "tree_parent_nested_w_with_scope",
+        Eval_tree_parent_nested_w_with_scope
     }
 };
 
@@ -2980,6 +3062,26 @@ bake_test_case Template_testcases[] = {
     {
         "template_w_script_pair_component",
         Template_template_w_script_pair_component
+    },
+    {
+        "template_w_prop_and_pair",
+        Template_template_w_prop_and_pair
+    },
+    {
+        "template_w_name_annotation",
+        Template_template_w_name_annotation
+    },
+    {
+        "template_w_name_annotation_update_script",
+        Template_template_w_name_annotation_update_script
+    },
+    {
+        "template_w_tree_parent",
+        Template_template_w_tree_parent
+    },
+    {
+        "template_w_tree_parent_change_value",
+        Template_template_w_tree_parent_change_value
     }
 };
 
@@ -5372,6 +5474,14 @@ bake_test_case Deserialize_testcases[] = {
         Deserialize_opaque_string
     },
     {
+        "opaque_entity",
+        Deserialize_opaque_entity
+    },
+    {
+        "struct_w_opaque_entity_member",
+        Deserialize_struct_w_opaque_entity_member
+    },
+    {
         "opaque_vector_i32_0",
         Deserialize_opaque_vector_i32_0
     },
@@ -5494,14 +5604,14 @@ static bake_test_suite suites[] = {
         "Eval",
         NULL,
         NULL,
-        390,
+        405,
         Eval_testcases
     },
     {
         "Template",
         NULL,
         NULL,
-        76,
+        81,
         Template_testcases
     },
     {
@@ -5545,7 +5655,7 @@ static bake_test_suite suites[] = {
         "Deserialize",
         Deserialize_setup,
         NULL,
-        121,
+        123,
         Deserialize_testcases,
         1,
         Deserialize_params

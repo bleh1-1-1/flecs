@@ -1283,6 +1283,23 @@ void Entity_set_r_T(void) {
     test_int(p.y, 20);
 }
 
+void Entity_set_r_t_generic_no_size(void) {
+    flecs::world world;
+
+    auto position = world.component<Position>();
+
+    Position position_data = {10, 20};
+
+    flecs::entity rel = world.entity();
+    
+    flecs::entity e = world.entity()
+        .set_ptr(ecs_pair(rel, position), &position_data);
+
+    const Position* p = e.try_get_second<Position>(rel);
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
 void Entity_assign_T(void) {
     flecs::world world;
 
@@ -2332,6 +2349,27 @@ void Entity_override_pair_w_tgt_id(void) {
     test_assert(!e.owns<Position>(tgt_b));
 }
 
+void Entity_override_pair_w_rel_id(void) {
+    flecs::world world;
+
+    world.component<Position>();
+    auto rel_a = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+    auto rel_b = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+
+    auto base = world.entity()
+        .auto_override_second<Position>(rel_a)
+        .add_second<Position>(rel_b);
+
+    auto e = world.entity()
+        .add(flecs::IsA, base);
+
+    test_assert(e.has_second<Position>(rel_a));
+    test_assert(e.owns_second<Position>(rel_a));
+
+    test_assert(e.has_second<Position>(rel_b));
+    test_assert(!e.owns_second<Position>(rel_b));
+}
+
 void Entity_override_pair_w_ids(void) {
     flecs::world world;
 
@@ -2373,6 +2411,28 @@ void Entity_override_pair(void) {
 
     test_assert((e.has<Position, TagB>()));
     test_assert((!e.owns<Position, TagB>()));
+}
+
+void Entity_override_pair_second(void) {
+    flecs::world world;
+
+    flecs::entity TagA = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+    flecs::entity TagB = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+
+    world.component<Position>();
+
+    auto base = world.entity()
+        .auto_override_second<Position>(TagA)
+        .add_second<Position>(TagB);
+
+    auto e = world.entity()
+        .add(flecs::IsA, base);
+
+    test_assert((e.has_second<Position>(TagA)));
+    test_assert((e.owns_second<Position>(TagA)));
+
+    test_assert((e.has_second<Position>(TagB)));
+    test_assert((!e.owns_second<Position>(TagB)));
 }
 
 void Entity_set_override(void) {
@@ -6660,4 +6720,388 @@ void Entity_assign_non_copy_assignable_w_move_assign(void) {
     test_assert(comp != nullptr);
     test_int(comp->x, 10);
     test_int(comp->moved, 1);
+}
+
+void Entity_set_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    const flecs::Parent& p = child.get<flecs::Parent>();
+    test_assert(p.value == parent);
+}
+
+void Entity_defer_set_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+
+    world.defer_begin();
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(!child.has<flecs::Parent>());
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+    world.defer_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    const flecs::Parent& p = child.get<flecs::Parent>();
+    test_assert(p.value == parent);
+}
+
+void Entity_set_change_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    child.set(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_defer_set_change_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    world.defer_begin();
+    child.set(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+    world.defer_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_assign_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    child.assign(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_defer_assign_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    world.defer_begin();
+    child.assign(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+    world.defer_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_set_parent_on_stage(void) {
+    flecs::world world;
+
+    flecs::world stage = world.get_stage(0);
+
+    flecs::entity parent = world.entity();
+
+    world.readonly_begin();
+
+    flecs::entity child = stage.entity().set(flecs::Parent{parent});
+
+    test_assert(!child.has<flecs::Parent>());
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    world.readonly_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    const flecs::Parent& p = child.get<flecs::Parent>();
+    test_assert(p.value == parent);
+}
+
+void Entity_assign_parent_on_stage(void) {
+    flecs::world world;
+
+    flecs::world stage = world.get_stage(0);
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+
+    world.readonly_begin();
+
+    flecs::entity child = stage.entity().set(flecs::Parent{parent});
+
+    test_assert(!child.has<flecs::Parent>());
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    world.readonly_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    world.readonly_begin();
+
+    child.assign(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    world.readonly_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_entity_w_childof(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.entity(p, nullptr);
+
+    test_assert(e.has(flecs::ChildOf, p));
+}
+
+void Entity_entity_w_childof_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.entity(p, "Foo");
+
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_entity_w_childof_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.entity(p, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_entity_w_parent(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.entity(flecs::Parent{p});
+
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+}
+
+void Entity_entity_w_parent_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.entity(flecs::Parent{p}, "Foo");
+
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_entity_w_parent_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.entity(flecs::Parent{p}, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(!f.has<flecs::Parent>());
+    test_assert(e.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_childof(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.prefab(p, nullptr);
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, p));
+}
+
+void Entity_prefab_w_childof_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.prefab(p, "Foo");
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_childof_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.prefab(p, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_parent(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.prefab(flecs::Parent{p});
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+}
+
+void Entity_prefab_w_parent_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.prefab(flecs::Parent{p}, "Foo");
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_parent_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.prefab(flecs::Parent{p}, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(!f.has<flecs::Parent>());
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
 }

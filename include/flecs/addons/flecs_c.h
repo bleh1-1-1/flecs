@@ -190,12 +190,12 @@
 /* Forward declare a query. */
 #define ECS_QUERY_DECLARE(name)         ecs_query_t* name
 
-/** Define a forward declared observer.
+/** Define a forward declared query.
  *
  * Example:
  *
  * @code
- * ECS_QUERY_DEFINE(world, AddPosition, Position);
+ * ECS_QUERY_DEFINE(world, Move, Position, [in] Velocity);
  * @endcode
  */
 #define ECS_QUERY_DEFINE(world, name_, ...)\
@@ -209,12 +209,12 @@
         ecs_assert(name_ != NULL, ECS_INVALID_PARAMETER, "failed to create query %s", #name_);\
     }
 
-/** Declare & define an observer.
+/** Declare & define a query.
  *
  * Example:
  *
  * @code
- * ECS_OBSERVER(world, AddPosition, EcsOnAdd, Position);
+ * ECS_QUERY(world, Move, Position, [in] Velocity);
  * @endcode
  */
 #define ECS_QUERY(world, name, ...)\
@@ -252,9 +252,12 @@
 /** Shorthand for creating a query with ecs_query_cache_init.
  *
  * Example:
+ * 
+ * @code
  *   ecs_query(world, {
  *     .terms = {{ ecs_id(Position) }}
  *   });
+ * @endcode
  */
 #define ecs_query(world, ...)\
     ecs_query_init(world, &(ecs_query_desc_t) __VA_ARGS__ )
@@ -702,10 +705,10 @@
 #define ecs_value_ptr(T, ptr) ((ecs_value_t){ecs_id(T), ptr})
 
 /** Convenience macro for creating compound literal pair value */
-#define ecs_value_pair(R, t, ...) ((ecs_value_t){ecs_pair_t(R, t), &(R)__VA_ARGS__})
+#define ecs_pair_value(R, t, ...) ((ecs_value_t){ecs_pair_t(R, t), &(R)__VA_ARGS__})
 
 /** Convenience macro for creating compound literal pair value */
-#define ecs_value_pair_2nd(r, T, ...) ((ecs_value_t){ecs_pair(r, ecs_id(T)), &(T)__VA_ARGS__})
+#define ecs_pair_value_2nd(r, T, ...) ((ecs_value_t){ecs_pair(r, ecs_id(T)), &(T)__VA_ARGS__})
 
 /** Convenience macro for creating heap allocated value */
 #define ecs_value_new_t(world, T) ecs_value_new(world, ecs_id(T))

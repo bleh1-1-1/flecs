@@ -396,7 +396,8 @@ struct entity_view : public id {
     const T& get() const {
         const T *r = try_get<T>();
         ecs_assert(r != nullptr, ECS_INVALID_OPERATION, 
-            "invalid get: entity does not have component (use try_get)");
+            "invalid get: entity does not have component '%s' (use try_get)",
+                flecs::_::type_name<T>());
         return *r;
     }
 
@@ -413,7 +414,8 @@ struct entity_view : public id {
     const A& get() const {
         const A *r = try_get<T>();
         ecs_assert(r != nullptr, ECS_INVALID_OPERATION, 
-            "invalid get: entity does not have component (use try_get)");
+            "invalid get: entity does not have component '%s' (use try_get)",
+            flecs::_::type_name<T>());
         return *r;
     }
     
@@ -1065,6 +1067,17 @@ struct entity_view : public id {
         return owns(
             _::type<First>::id(world_),
             _::type<Second>::id(world_));
+    }
+
+    /** Check if entity owns the provided pair.
+     *
+     * @param first The first element of the pair.
+     * @tparam Second The second element of the pair.
+     * @return True if the entity owns the provided component, false otherwise.
+     */
+    template <typename Second>
+    bool owns_second(flecs::entity_t first) const {
+        return owns(first, _::type<Second>::id(world_));
     }
 
     /** Test if id is enabled.

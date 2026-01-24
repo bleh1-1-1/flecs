@@ -148,8 +148,6 @@ jobs:
           - { os: ubuntu-latest, cc: gcc-12, cxx: g++-12 }
           - { os: ubuntu-24.04, cc: gcc-13, cxx: g++-13 }
           - { os: ubuntu-24.04, cc: gcc-14, cxx: g++-14 }
-          - { os: ubuntu-22.04, cc: clang-11, cxx: clang++-11 }
-          - { os: ubuntu-22.04, cc: clang-12, cxx: clang++-12 }
           - { os: ubuntu-latest, cc: clang-14, cxx: clang++-14 }
           - { os: ubuntu-latest, cc: clang-15, cxx: clang++-15 }
           - { os: ubuntu-latest, cc: clang-16, cxx: clang++-16 }
@@ -294,33 +292,33 @@ jobs:
         run: |
           meson compile
 
-  build-bazel-linux:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  # build-bazel-linux:
+  #   needs: build-linux
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
 
-    steps:
-      - uses: actions/checkout@v4
-      - name: build flecs
-        run: bazel build //:flecs
-      - name: build examples
-        run: bazel build //examples/...
-      - name: run tests
-        run: bazel test --test_output=all //test/...
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: build flecs
+  #       run: bazel build //:flecs
+  #     - name: build examples
+  #       run: bazel build //examples/...
+  #     - name: run tests
+  #       run: bazel test --test_output=all //test/...
     
-  build-bazel-windows:
-    needs: build-windows
-    runs-on: windows-latest
-    timeout-minutes: 30
+  # build-bazel-windows:
+  #   needs: build-windows
+  #   runs-on: windows-latest
+  #   timeout-minutes: 30
 
-    steps:
-      - uses: actions/checkout@v4
-      - name: build flecs
-        run: bazel build //:flecs
-      - name: build examples
-        run: bazel build //examples/...
-      - name: run tests
-        run: bazel test --test_output=all //test/...
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: build flecs
+  #       run: bazel build //:flecs
+  #     - name: build examples
+  #       run: bazel build //examples/...
+  #     - name: run tests
+  #       run: bazel test --test_output=all //test/...
 
   build-custom:
     needs: build-linux
@@ -714,8 +712,6 @@ jobs:
           - { os: ubuntu-latest, cc: gcc-12, cxx: g++-12 }
           - { os: ubuntu-24.04, cc: gcc-13, cxx: g++-13 }
           - { os: ubuntu-24.04, cc: gcc-14, cxx: g++-14 }
-          - { os: ubuntu-22.04, cc: clang-11, cxx: clang++-11 }
-          - { os: ubuntu-22.04, cc: clang-12, cxx: clang++-12 }
           - { os: ubuntu-latest, cc: clang-14, cxx: clang++-14 }
           - { os: ubuntu-latest, cc: clang-15, cxx: clang++-15 }
           - { os: ubuntu-latest, cc: clang-16, cxx: clang++-16 }

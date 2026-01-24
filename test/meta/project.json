@@ -646,6 +646,7 @@
                 "ser_deser_w_alerts",
                 "ser_deser_w_alerts_w_progress",
                 "ser_deser_struct",
+                "ser_deser_struct_no_member_entities",
                 "ser_deser_anon_w_same_id_as_existing_named",
                 "ser_deser_named_to_different_table",
                 "ser_deser_named_child_to_different_table",
@@ -805,7 +806,9 @@
                 "serialize_base_w_invalid_component",
                 "serialize_w_blacklist",
                 "serialize_w_allow_blacklist",
-                "serialize_w_partial_blacklist"
+                "serialize_w_partial_blacklist",
+                "serialize_value_pair",
+                "serialize_parent_component"
             ]
         }, {
             "id": "SerializeIterToJson",
@@ -1052,7 +1055,8 @@
                 "private_members",
                 "enum_constant_w_name_prefix",
                 "enum_constant_w_type_prefix",
-                "enum_constant_w_name_type_prefix"
+                "enum_constant_w_name_type_prefix",
+                "struct_has_member_entities"
             ]
         }, {
             "id": "OpaqueTypes",

@@ -17,27 +17,6 @@ namespace flecs {
 
 namespace _ {
 
-// Trick to obtain typename from type, as described here
-// https://blog.molecular-matters.com/2015/12/11/getting-the-type-of-a-template-argument-as-string-without-rtti/
-//
-// The code from the link has been modified to work with more types, and across
-// multiple compilers. The resulting string should be the same on all platforms
-// for all compilers.
-//
-
-#if defined(__GNUC__) || defined(_WIN32)
-template <typename T>
-inline const char* type_name() {
-    static const size_t len = ECS_FUNC_TYPE_LEN(const char*, type_name, ECS_FUNC_NAME);
-    static char result[len + 1] = {};
-    static const size_t front_len = ECS_FUNC_NAME_FRONT(const char*, type_name);
-    static const char* cppTypeName = ecs_cpp_get_type_name(result, ECS_FUNC_NAME, len, front_len);
-    return cppTypeName;
-}
-#else
-#error "implicit component registration not supported"
-#endif
-
 // Translate a typename into a language-agnostic identifier. This allows for
 // registration of components/modules across language boundaries.
 template <typename T>
@@ -83,38 +62,34 @@ template <> inline const char* symbol_name<double>() {
 // that obtain the lifecycle callback do detect whether the callback is required
 // adding a special case for trivial types eases the burden a bit on the
 // compiler as it reduces the number of templates to evaluate.
-template<typename T, enable_if_t<
-    std::is_trivial<T>::value == true
-        >* = nullptr>
-void register_lifecycle_actions(ecs_world_t*, ecs_entity_t) { }
-
-// If the component is non-trivial, register component lifecycle actions.
-// Depending on the type not all callbacks may be available.
-template<typename T, enable_if_t<
-    std::is_trivial<T>::value == false
-        >* = nullptr>
+template<typename T>
 void register_lifecycle_actions(
     ecs_world_t *world,
     ecs_entity_t component)
 {
-    ecs_type_hooks_t cl{};
-    cl.ctor = ctor<T>(cl.flags);
-    cl.dtor = dtor<T>(cl.flags);
+    (void)world; (void)component;
+    if constexpr (!std::is_trivial<T>::value) {
+        // If the component is non-trivial, register component lifecycle actions.
+        // Depending on the type not all callbacks may be available.
+        ecs_type_hooks_t cl{};
+        cl.ctor = ctor<T>(cl.flags);
+        cl.dtor = dtor<T>(cl.flags);
 
-    cl.copy = copy<T>(cl.flags);
-    cl.copy_ctor = copy_ctor<T>(cl.flags);
-    cl.move = move<T>(cl.flags);
-    cl.move_ctor = move_ctor<T>(cl.flags);
+        cl.copy = copy<T>(cl.flags);
+        cl.copy_ctor = copy_ctor<T>(cl.flags);
+        cl.move = move<T>(cl.flags);
+        cl.move_ctor = move_ctor<T>(cl.flags);
 
-    cl.ctor_move_dtor = ctor_move_dtor<T>(cl.flags);
-    cl.move_dtor = move_dtor<T>(cl.flags);
+        cl.ctor_move_dtor = ctor_move_dtor<T>(cl.flags);
+        cl.move_dtor = move_dtor<T>(cl.flags);
 
-    cl.flags &= ECS_TYPE_HOOKS_ILLEGAL;
-    ecs_set_hooks_id(world, component, &cl);
+        cl.flags &= ECS_TYPE_HOOKS_ILLEGAL;
+        ecs_set_hooks_id(world, component, &cl);
 
-    if (cl.flags & (ECS_TYPE_HOOK_MOVE_ILLEGAL|ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL))
-    {
-        ecs_add_id(world, component, flecs::Sparse);
+        if (cl.flags & (ECS_TYPE_HOOK_MOVE_ILLEGAL|ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL))
+        {
+            ecs_add_id(world, component, flecs::Sparse);
+        }
     }
 }
 
@@ -258,10 +233,10 @@ struct type_impl {
 };
 
 // Global templated variables that hold component identifier and other info
-template <typename T> int32_t  type_impl<T>::s_index;
-template <typename T> size_t   type_impl<T>::s_size;
-template <typename T> size_t   type_impl<T>::s_alignment;
-template <typename T> bool     type_impl<T>::s_allow_tag( true );
+template <typename T> inline int32_t  type_impl<T>::s_index;
+template <typename T> inline size_t   type_impl<T>::s_size;
+template <typename T> inline size_t   type_impl<T>::s_alignment;
+template <typename T> inline bool     type_impl<T>::s_allow_tag( true );
 
 // Front facing class for implicitly registering a component & obtaining
 // static component data
