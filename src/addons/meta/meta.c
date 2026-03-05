@@ -54,7 +54,6 @@ static ECS_DTOR(EcsTypeSerializer, ptr, {
     flecs_type_serializer_dtor(ptr);
 })
 
-static
 const char* flecs_type_kind_str(
     ecs_type_kind_t kind)
 {
@@ -70,6 +69,33 @@ const char* flecs_type_kind_str(
     }
 }
 
+const char* flecs_primitive_type_kind_str(
+    ecs_primitive_kind_t kind)
+{
+    switch(kind) {
+    case EcsBool: return "Bool";
+    case EcsChar: return "Char";
+    case EcsByte: return "Byte";
+    case EcsU8: return "U8";
+    case EcsU16: return "U16";
+    case EcsU32: return "U32";
+    case EcsU64: return "U64";
+    case EcsI8: return "I8";
+    case EcsI16: return "I16";
+    case EcsI32: return "I32";
+    case EcsI64: return "I64";
+    case EcsF32: return "F32";
+    case EcsF64: return "F64";
+    case EcsUPtr: return "UPtr";
+    case EcsIPtr: return "IPtr";
+    case EcsString: return "String";
+    case EcsEntity: return "Entity";
+    case EcsId: return "Id";
+    default: return "unknown";
+    }
+}
+
+
 int flecs_init_type(
     ecs_world_t *world,
     ecs_entity_t type,
@@ -84,9 +110,11 @@ int flecs_init_type(
     if (meta_type->kind == 0) {
         meta_type->kind = kind;
 
+        const EcsComponent *cptr = ecs_get(world, type, EcsComponent);
+
         /* Determine if this is an existing type or a reflection-defined type 
          * (runtime type) */
-        meta_type->existing = ecs_has(world, type, EcsComponent);
+        meta_type->existing = (cptr != NULL) && (cptr->size != 0);
 
         /* For existing types, ensure that component has a default constructor, 
          * to prevent crashing serializers on uninitialized values. For runtime 
@@ -97,6 +125,7 @@ int flecs_init_type(
             if(!ti->hooks.ctor) {
                 ti->hooks.ctor = flecs_default_ctor;
             }
+
             if(kind == EcsEnumType) {
                 /* Generate compare/equals hooks for enums, copying
                    the underlying type's hooks, which should be 
@@ -133,27 +162,29 @@ int flecs_init_type(
         ecs_modified(world, type, EcsComponent);
     } else {
         const EcsComponent *comp = ecs_get(world, type, EcsComponent);
-        if (comp->size < size) {
-            ecs_err(
-                "computed size (%d) for '%s' is larger than actual type (%d)", 
-                size, ecs_get_name(world, type), comp->size);
-            return -1;
-        }
-        if (comp->alignment < alignment) {
-            ecs_err(
-                "computed alignment (%d) for '%s' is larger than actual type (%d)", 
-                alignment, ecs_get_name(world, type), comp->alignment);
-            return -1;
-        }
-        if (comp->size == size && comp->alignment != alignment) {
-            if (comp->alignment < alignment) {
-                ecs_err("computed size for '%s' matches with actual type but "
-                    "alignment is different (%d vs. %d)", 
-                        ecs_get_name(world, type), alignment, comp->alignment);
+        if (comp->size) {
+            if (comp->size < size) {
+                ecs_err(
+                    "computed size (%d) for '%s' is larger than actual type (%d)", 
+                    size, ecs_get_name(world, type), comp->size);
+                return -1;
             }
-        }
+            if (comp->alignment < alignment) {
+                ecs_err(
+                    "computed alignment (%d) for '%s' is larger than actual type (%d)", 
+                    alignment, ecs_get_name(world, type), comp->alignment);
+                return -1;
+            }
+            if (comp->size == size && comp->alignment != alignment) {
+                if (comp->alignment < alignment) {
+                    ecs_err("computed size for '%s' matches with actual type but "
+                        "alignment is different (%d vs. %d)", 
+                            ecs_get_name(world, type), alignment, comp->alignment);
+                }
+            }
         
-        meta_type->partial = comp->size != size;
+            meta_type->partial = comp->size != size;
+        }
     }
 
     ecs_modified(world, type, EcsType);

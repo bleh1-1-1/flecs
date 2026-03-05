@@ -3218,6 +3218,30 @@ void Pairs_force_target_on_target(void) {
     ecs_fini(world);
 }
 
+void Pairs_disable_w_toggle_pair_rel_target_traits(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t rel = ecs_new(world);
+    ecs_add_id(world, rel, EcsRelationship);
+    ecs_add_id(world, rel, EcsCanToggle);
+
+    ecs_entity_t tgt = ecs_new(world);
+    ecs_add_id(world, tgt, EcsTarget);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, rel, tgt);
+
+    test_bool(true, ecs_is_enabled_id(world, e, ecs_pair(rel, tgt)));
+
+    ecs_enable_id(world, e, ecs_pair(rel, tgt), false);
+    test_bool(false, ecs_is_enabled_id(world, e, ecs_pair(rel, tgt)));
+
+    ecs_enable_id(world, e, ecs_pair(rel, tgt), true);
+    test_bool(true, ecs_is_enabled_id(world, e, ecs_pair(rel, tgt)));
+
+    ecs_fini(world);
+}
+
 void Pairs_relationship_with_exclusive(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -3407,6 +3431,21 @@ void Pairs_has_value_pair_any(void) {
     test_bool(true, ecs_has_id(world, e, ecs_value_pair(Number, 10)));
     test_bool(true, ecs_has_id(world, e, ecs_pair(Number, EcsAny)));
     test_bool(false, ecs_has_id(world, e, ecs_value_pair(Number, EcsAny)));
+
+    ecs_fini(world);
+}
+
+void Pairs_target_w_value_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Number);
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_add_id(world, e, ecs_value_pair(Number, 10));
+
+    uint64_t v = ecs_get_target(world, e, Number, 0);
+    test_int(v, 10);
 
     ecs_fini(world);
 }

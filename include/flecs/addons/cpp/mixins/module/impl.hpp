@@ -35,7 +35,7 @@ ecs_entity_t do_import(world& world, const char *symbol) {
 
     // It should now be possible to lookup the module
     ecs_entity_t m = ecs_lookup_symbol(world, symbol, false, false);
-    ecs_assert(m != 0, ECS_MODULE_UNDEFINED, symbol);
+    ecs_assert(m != 0, ECS_MODULE_UNDEFINED, "%s", symbol);
     ecs_assert(m == c_, ECS_INTERNAL_ERROR, NULL);
 
     ecs_log_pop();
@@ -92,17 +92,8 @@ inline flecs::entity world::module(const char *name) const {
             flecs::entity cur = prev_parent, next;
             while (cur) {
                 next = cur.parent();
-
-                ecs_iter_t it = ecs_each_id(world_, ecs_pair(EcsChildOf, cur));
-                if (!ecs_iter_is_true(&it)) {
-                    cur.destruct();
-
-                    // Prevent increasing the generation count of the temporary
-                    // parent. This allows entities created during 
-                    // initialization to keep non-recycled ids.
-                    this->set_version(cur);
-                }
-
+                cur.destruct();
+                this->set_version(cur);
                 cur = next;
             }
         }

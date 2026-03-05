@@ -1754,6 +1754,7 @@ void Cached_rematch_empty_table_w_superset(void);
 void Cached_2_self_up_terms_new_tables(void);
 void Cached_this_self_up_childof_pair_new_tables(void);
 void Cached_up_w_delete_table_and_move_parent(void);
+void Cached_cascade_default_group_reinsert_after_empty_table_delete(void);
 void Cached_it_ptrs(void);
 void Cached_it_ptrs_after_column_resize(void);
 void Cached_it_ptrs_after_column_merge(void);
@@ -1924,6 +1925,10 @@ void GroupBy_group_by_childof(void);
 void GroupBy_remove_all(void);
 void GroupBy_recreate_after_remove_all(void);
 void GroupBy_group_by_parent_depth(void);
+void GroupBy_get_groups(void);
+void GroupBy_get_groups_default_group(void);
+void GroupBy_on_group_create_delete_default_group(void);
+void GroupBy_on_group_delete_not_called_for_uncreated_default_group(void);
 
 // Testsuite 'MemberTarget'
 void MemberTarget_setup(void);
@@ -9654,6 +9659,10 @@ bake_test_case Cached_testcases[] = {
         Cached_up_w_delete_table_and_move_parent
     },
     {
+        "cascade_default_group_reinsert_after_empty_table_delete",
+        Cached_cascade_default_group_reinsert_after_empty_table_delete
+    },
+    {
         "it_ptrs",
         Cached_it_ptrs
     },
@@ -10322,6 +10331,22 @@ bake_test_case GroupBy_testcases[] = {
     {
         "group_by_parent_depth",
         GroupBy_group_by_parent_depth
+    },
+    {
+        "get_groups",
+        GroupBy_get_groups
+    },
+    {
+        "get_groups_default_group",
+        GroupBy_get_groups_default_group
+    },
+    {
+        "on_group_create_delete_default_group",
+        GroupBy_on_group_create_delete_default_group
+    },
+    {
+        "on_group_delete_not_called_for_uncreated_default_group",
+        GroupBy_on_group_delete_not_called_for_uncreated_default_group
     }
 };
 
@@ -13881,7 +13906,7 @@ static bake_test_suite suites[] = {
         "Cached",
         NULL,
         NULL,
-        161,
+        162,
         Cached_testcases
     },
     {
@@ -13895,7 +13920,7 @@ static bake_test_suite suites[] = {
         "GroupBy",
         NULL,
         NULL,
-        21,
+        25,
         GroupBy_testcases
     },
     {

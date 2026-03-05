@@ -189,7 +189,8 @@
                 "register_run_after_callback",
                 "register_callback_after_run_ctx",
                 "register_run_after_callback_ctx",
-                "run_w_query_next"
+                "run_w_query_next",
+                "missing_callback"
             ]
         }, {
             "id": "SystemPeriodic",
@@ -482,7 +483,8 @@
                 "import_monitor_2_worlds",
                 "import_monitor_after_mini",
                 "import_2_worlds",
-                "component_parent_becomes_module"
+                "component_parent_becomes_module",
+                "module_has_singleton"
             ]
         }, {
             "id": "App",
@@ -514,6 +516,10 @@
                 "named_query",
                 "tables",
                 "components",
+                "type_info_non_existing_entity",
+                "type_info_not_component",
+                "type_info_component_without_reflection",
+                "type_info_component_with_reflection",
                 "request_commands",
                 "request_commands_2_syncs",
                 "request_commands_no_frames",
@@ -530,7 +536,8 @@
                 "request_ending_in_pct",
                 "request_ending_in_2_pct",
                 "request_ending_in_pct_single_digit",
-                "request_ending_in_pct_invalid_code"
+                "request_ending_in_pct_invalid_code",
+                "world_has_build_info"
             ]
         }, {
             "id": "Metrics",

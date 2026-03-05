@@ -182,6 +182,7 @@ void SystemMisc_register_run_after_callback(void);
 void SystemMisc_register_callback_after_run_ctx(void);
 void SystemMisc_register_run_after_callback_ctx(void);
 void SystemMisc_run_w_query_next(void);
+void SystemMisc_missing_callback(void);
 
 // Testsuite 'SystemPeriodic'
 void SystemPeriodic_1_type_1_component(void);
@@ -439,6 +440,7 @@ void Modules_import_monitor_2_worlds(void);
 void Modules_import_monitor_after_mini(void);
 void Modules_import_2_worlds(void);
 void Modules_component_parent_becomes_module(void);
+void Modules_module_has_singleton(void);
 
 // Testsuite 'App'
 void App_app_w_frame_action(void);
@@ -464,6 +466,10 @@ void Rest_query(void);
 void Rest_named_query(void);
 void Rest_tables(void);
 void Rest_components(void);
+void Rest_type_info_non_existing_entity(void);
+void Rest_type_info_not_component(void);
+void Rest_type_info_component_without_reflection(void);
+void Rest_type_info_component_with_reflection(void);
 void Rest_request_commands(void);
 void Rest_request_commands_2_syncs(void);
 void Rest_request_commands_no_frames(void);
@@ -481,6 +487,7 @@ void Rest_request_ending_in_pct(void);
 void Rest_request_ending_in_2_pct(void);
 void Rest_request_ending_in_pct_single_digit(void);
 void Rest_request_ending_in_pct_invalid_code(void);
+void Rest_world_has_build_info(void);
 
 // Testsuite 'Metrics'
 void Metrics_member_gauge_1_entity(void);
@@ -1241,6 +1248,10 @@ bake_test_case SystemMisc_testcases[] = {
     {
         "run_w_query_next",
         SystemMisc_run_w_query_next
+    },
+    {
+        "missing_callback",
+        SystemMisc_missing_callback
     }
 };
 
@@ -2170,6 +2181,10 @@ bake_test_case Modules_testcases[] = {
     {
         "component_parent_becomes_module",
         Modules_component_parent_becomes_module
+    },
+    {
+        "module_has_singleton",
+        Modules_module_has_singleton
     }
 };
 
@@ -2257,6 +2272,22 @@ bake_test_case Rest_testcases[] = {
         Rest_components
     },
     {
+        "type_info_non_existing_entity",
+        Rest_type_info_non_existing_entity
+    },
+    {
+        "type_info_not_component",
+        Rest_type_info_not_component
+    },
+    {
+        "type_info_component_without_reflection",
+        Rest_type_info_component_without_reflection
+    },
+    {
+        "type_info_component_with_reflection",
+        Rest_type_info_component_with_reflection
+    },
+    {
         "request_commands",
         Rest_request_commands
     },
@@ -2323,6 +2354,10 @@ bake_test_case Rest_testcases[] = {
     {
         "request_ending_in_pct_invalid_code",
         Rest_request_ending_in_pct_invalid_code
+    },
+    {
+        "world_has_build_info",
+        Rest_world_has_build_info
     }
 };
 
@@ -2652,7 +2687,7 @@ static bake_test_suite suites[] = {
         "SystemMisc",
         NULL,
         NULL,
-        70,
+        71,
         SystemMisc_testcases
     },
     {
@@ -2761,7 +2796,7 @@ static bake_test_suite suites[] = {
         "Modules",
         Modules_setup,
         NULL,
-        24,
+        25,
         Modules_testcases
     },
     {
@@ -2782,7 +2817,7 @@ static bake_test_suite suites[] = {
         "Rest",
         NULL,
         NULL,
-        26,
+        31,
         Rest_testcases
     },
     {

@@ -52,6 +52,8 @@ ecs_type_t flecs_prefab_spawner_build_type(
     ecs_type_t dst = {0};
     ecs_type_t *src = &table->type;
 
+    flecs_type_add(world, &dst, ecs_id(EcsParent));
+
     int32_t i, count = src->count;
     for (i = 0; i < count; i ++) {
         ecs_id_t id = src->array[i];
@@ -122,6 +124,7 @@ void flecs_prefab_spawner_build_from_cr(
             NULL, spawner, ecs_tree_spawner_child_t);
         elem->parent_index = parent_index;
         elem->child_name = NULL;
+        elem->child = (uint32_t)child;
 
         if (table->flags & EcsTableHasName) {
             elem->child_name = ecs_get_name(world, child);
@@ -171,6 +174,7 @@ void flecs_spawner_transpose_depth(
 
         dst_elem->child_name = src_elem->child_name;
         dst_elem->parent_index = src_elem->parent_index;
+        dst_elem->child = src_elem->child;
         
         /* Get depth for source element at depth 0 */
         int32_t src_depth = flecs_relation_depth(
@@ -200,6 +204,7 @@ EcsTreeSpawner* flecs_prefab_spawner_build(
     ecs_vec_init_t(NULL, &spawner, ecs_tree_spawner_child_t, 0);
     flecs_prefab_spawner_build_from_cr(world, cr, &spawner, 0, 1);
 
+    base = flecs_entities_get_alive(world, base);
     EcsTreeSpawner *ts = ecs_ensure(world, base, EcsTreeSpawner);
     ts->data[0].children = spawner;
 
@@ -274,13 +279,8 @@ void flecs_spawner_instantiate(
             .added_flags = flags
         };
 
-        int32_t row = flecs_table_append(world, table, entity, true, true);
-        r->table = table;
-        r->row = (uint32_t)row;
-
-        flecs_actions_new(world, table, row, 1, &table_diff, 0, false, true);
-
         ecs_entity_t parent = parents[spawn_child->parent_index];
+        ecs_assert(parent != 0, ECS_INTERNAL_ERROR, NULL);
         if (parent != old_parent) {
             cr = flecs_components_ensure(world, ecs_childof(parent));
             old_parent = parent;
@@ -288,16 +288,41 @@ void flecs_spawner_instantiate(
 
         ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
 
+        int32_t row = ecs_table_count(table);
+        r->table = table;
+        r->row = (uint32_t)row;
+        flecs_table_append(world, table, entity, true, true);
+
         int32_t parent_column = table->component_map[ecs_id(EcsParent)];
+        ecs_assert(parent_column != 0, ECS_INTERNAL_ERROR, NULL);
         EcsParent *parent_ptr = table->data.columns[parent_column - 1].data;
         parent_ptr = &parent_ptr[row];
         parent_ptr->value = parent;
+
+        flecs_actions_new(world, table, row, 1, &table_diff, 0, false, true);
 
         if (is_prefab && spawn_child->child_name) {
             ecs_set_name(world, entity, spawn_child->child_name);
         }
 
         flecs_add_non_fragmenting_child_w_records(world, parent, entity, cr, r);
+
+        ecs_entity_t base_child = spawn_child->child;
+        ecs_record_t *spawn_r = flecs_entities_get_any(
+            world, spawn_child->child);
+        ecs_assert(spawn_r != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        ecs_table_range_t base_range = {
+            .table = spawn_r->table,
+            .offset = 0,
+            .count = 1 };
+        flecs_instantiate_sparse(world, &base_range, &base_child, 
+            r->table, &entity, ECS_RECORD_TO_ROW(r->row));
+
+        if (spawn_r->row & EcsEntityHasDontFragment) {
+            flecs_instantiate_dont_fragment(
+                world, spawn_child->child, entity);
+        }
     }
 
     if (vec == &tmp_vec) {

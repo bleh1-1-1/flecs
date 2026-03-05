@@ -200,7 +200,7 @@ const char* flecs_path_elem(
             continue;
         }
 
-        ecs_check(template_nesting >= 0, ECS_INVALID_PARAMETER, path);
+        ecs_check(template_nesting >= 0, ECS_INVALID_PARAMETER, "%s", path);
 
         if (!template_nesting && flecs_is_sep(&ptr, sep)) {
             break;
@@ -1023,7 +1023,6 @@ const char* ecs_get_symbol(
     }
 }
 
-static
 ecs_entity_t flecs_set_identifier(
     ecs_world_t *world,
     ecs_stage_t *stage,

@@ -51,6 +51,7 @@ void Entity_ensure_generic_w_id(void);
 void Entity_ensure_generic_w_id_t(void);
 void Entity_get_w_id(void);
 void Entity_get_T(void);
+void Entity_get_n_T(void);
 void Entity_get_r_t(void);
 void Entity_get_R_t(void);
 void Entity_get_R_T(void);
@@ -63,12 +64,14 @@ void Entity_get_R_T_not_found(void);
 void Entity_get_r_T_not_found(void);
 void Entity_try_get_w_id(void);
 void Entity_try_get_T(void);
+void Entity_try_get_n_T(void);
 void Entity_try_get_r_t(void);
 void Entity_try_get_R_t(void);
 void Entity_try_get_R_T(void);
 void Entity_try_get_r_T(void);
 void Entity_get_mut_w_id(void);
 void Entity_get_mut_T(void);
+void Entity_get_mut_n_T(void);
 void Entity_get_mut_r_t(void);
 void Entity_get_mut_R_t(void);
 void Entity_get_mut_R_T(void);
@@ -81,6 +84,7 @@ void Entity_get_mut_R_T_not_found(void);
 void Entity_get_mut_r_T_not_found(void);
 void Entity_try_get_mut_w_id(void);
 void Entity_try_get_mut_T(void);
+void Entity_try_get_mut_n_T(void);
 void Entity_try_get_mut_r_t(void);
 void Entity_try_get_mut_R_t(void);
 void Entity_try_get_mut_R_T(void);
@@ -399,6 +403,12 @@ void Entity_prefab_w_childof_w_name_existing_w_name(void);
 void Entity_prefab_w_parent(void);
 void Entity_prefab_w_parent_w_name(void);
 void Entity_prefab_w_parent_w_name_existing_w_name(void);
+void Entity_defer_set_parent_to_deleted(void);
+void Entity_defer_set_parent_to_deleted_batched(void);
+void Entity_defer_set_existing_parent_to_deleted(void);
+void Entity_defer_set_existing_parent_to_deleted_batched(void);
+void Entity_defer_assign_parent_to_deleted(void);
+void Entity_defer_assign_parent_to_deleted_batched(void);
 
 // Testsuite 'OrderedChildren'
 void OrderedChildren_iter_no_children(void);
@@ -820,6 +830,8 @@ void Query_iter_targets_field_out_of_range(void);
 void Query_iter_targets_field_not_a_pair(void);
 void Query_iter_targets_field_not_set(void);
 void Query_copy_operators(void);
+void Query_optional_singleton(void);
+void Query_optional_module(void);
 
 // Testsuite 'QueryBuilder'
 void QueryBuilder_setup(void);
@@ -1257,6 +1269,7 @@ void Module_reimport_after_delete(void);
 void Module_component_name_w_module_name(void);
 void Module_delete_module_w_implicit_component_and_system(void);
 void Module_delete_module_w_explicit_component_and_system(void);
+void Module_module_has_singleton(void);
 
 // Testsuite 'ImplicitComponents'
 void ImplicitComponents_add(void);
@@ -1316,7 +1329,6 @@ void World_reregister_after_reset_w_namespace(void);
 void World_reregister_namespace(void);
 void World_reregister_after_delete(void);
 void World_implicit_reregister_after_reset(void);
-void World_reregister_after_reset_different_name(void);
 void World_register_short_template(void);
 void World_reimport(void);
 void World_reimport_module_after_reset(void);
@@ -1332,7 +1344,6 @@ void World_register_builtin_after_reset(void);
 void World_register_meta_after_reset(void);
 void World_reregister_after_reset_w_hooks_and_in_use(void);
 void World_reregister_after_reset_w_hooks_and_in_use_implicit(void);
-void World_register_component_w_reset_in_multithreaded(void);
 void World_register_component_w_core_name(void);
 void World_register_nested_component_in_module(void);
 void World_count(void);
@@ -1400,6 +1411,7 @@ void World_run_post_frame(void);
 void World_component_w_low_id(void);
 void World_get_set_log_level(void);
 void World_reset_world(void);
+void World_reset_set_rest_after_reset(void);
 void World_id_from_pair_type(void);
 void World_scope_w_name(void);
 void World_set_get_context(void);
@@ -1484,79 +1496,6 @@ void Singleton_try_get_mut_T(void);
 void Singleton_try_get_mut_r_t(void);
 void Singleton_try_get_mut_R_t(void);
 void Singleton_try_get_mut_R_T(void);
-
-// Testsuite 'Misc'
-void Misc_setup(void);
-void Misc_string_compare_w_char_ptr(void);
-void Misc_string_compare_w_char_ptr_length_diff(void);
-void Misc_string_compare_w_string(void);
-void Misc_string_view_compare_w_char_ptr(void);
-void Misc_string_view_compare_w_string(void);
-void Misc_string_compare_nullptr(void);
-void Misc_nullptr_string_compare(void);
-void Misc_nullptr_string_compare_nullptr(void);
-void Misc_c_macros(void);
-void Misc_app_run(void);
-void Misc_app_run_target_fps(void);
-void Misc_app_run_set_frames(void);
-void Misc_app_on_remove_on_fini(void);
-void Misc_member_gauge_metric(void);
-void Misc_id_gauge_metric(void);
-void Misc_oneof_gauge_metric(void);
-void Misc_id_counter_metric(void);
-void Misc_oneof_counter_metric(void);
-void Misc_component_mixin_member_metric(void);
-void Misc_component_mixin_member_metric_custom_parent_entity(void);
-void Misc_metric_description(void);
-void Misc_component_mixin_member_metric_description(void);
-void Misc_member_metric_w_value_name(void);
-void Misc_member_metric_w_value_name_camel_case_type(void);
-void Misc_member_metric_w_custom_name(void);
-void Misc_dotmember_metric(void);
-void Misc_counter_id_metric(void);
-void Misc_counter_target_metric(void);
-void Misc_member_metric_w_pair_R_T(void);
-void Misc_member_metric_w_pair_R_t(void);
-void Misc_member_metric_w_pair_r_t(void);
-void Misc_member_metric_w_pair_r_T(void);
-void Misc_alert(void);
-void Misc_alert_w_message(void);
-void Misc_alert_w_brief(void);
-void Misc_alert_doc_name(void);
-void Misc_alert_severity_info(void);
-void Misc_alert_severity_warning(void);
-void Misc_alert_severity_error(void);
-void Misc_alert_severity_implicit(void);
-void Misc_alert_w_retain_period(void);
-void Misc_alert_w_severity_filter(void);
-void Misc_alert_w_severity_filter_severity_type(void);
-void Misc_alert_w_severity_filter_severity_type_id_type(void);
-void Misc_alert_w_severity_filter_severity_type_enum_constant(void);
-void Misc_alert_w_severity_filter_w_var(void);
-void Misc_alert_w_severity_filter_severity_type_w_var(void);
-void Misc_alert_w_severity_filter_severity_type_id_type_w_var(void);
-void Misc_alert_w_severity_filter_severity_type_enum_constant_w_var(void);
-void Misc_alert_for_member_range(void);
-void Misc_alert_w_member_range_from_var(void);
-void Misc_map_api(void);
-void Misc_get_const_var(void);
-void Misc_get_const_var_struct(void);
-void Misc_get_const_var_as_f32(void);
-void Misc_get_const_var_as_i32(void);
-void Misc_get_const_var_as_u32(void);
-void Misc_get_const_var_w_out(void);
-void Misc_get_const_var_struct_w_out(void);
-void Misc_get_const_var_struct_w_out_not_found(void);
-void Misc_get_const_var_as_f32_w_out(void);
-void Misc_get_const_var_as_i32_w_out(void);
-void Misc_get_const_var_as_u32_w_out(void);
-void Misc_get_const_var_not_found(void);
-void Misc_get_const_var_not_a_var(void);
-void Misc_get_scoped_const_var(void);
-void Misc_get_module_const_var(void);
-void Misc_get_module_const_var_from_script_module(void);
-void Misc_get_module_const_var_from_nested_script_module(void);
-void Misc_get_module_const_var_from_nested_module_no_script_module(void);
 
 // Testsuite 'Meta'
 void Meta_struct(void);
@@ -1670,14 +1609,6 @@ void Table_lock(void);
 void Table_unlock(void);
 void Table_has_flags(void);
 void Table_clear_entities(void);
-
-// Testsuite 'Doc'
-void Doc_set_brief(void);
-void Doc_set_name(void);
-void Doc_set_link(void);
-void Doc_set_color(void);
-void Doc_set_uuid(void);
-void Doc_get_name_no_doc_name(void);
 
 bake_test_case PrettyFunction_testcases[] = {
     {
@@ -1844,6 +1775,10 @@ bake_test_case Entity_testcases[] = {
         Entity_get_T
     },
     {
+        "get_n_T",
+        Entity_get_n_T
+    },
+    {
         "get_r_t",
         Entity_get_r_t
     },
@@ -1892,6 +1827,10 @@ bake_test_case Entity_testcases[] = {
         Entity_try_get_T
     },
     {
+        "try_get_n_T",
+        Entity_try_get_n_T
+    },
+    {
         "try_get_r_t",
         Entity_try_get_r_t
     },
@@ -1914,6 +1853,10 @@ bake_test_case Entity_testcases[] = {
     {
         "get_mut_T",
         Entity_get_mut_T
+    },
+    {
+        "get_mut_n_T",
+        Entity_get_mut_n_T
     },
     {
         "get_mut_r_t",
@@ -1962,6 +1905,10 @@ bake_test_case Entity_testcases[] = {
     {
         "try_get_mut_T",
         Entity_try_get_mut_T
+    },
+    {
+        "try_get_mut_n_T",
+        Entity_try_get_mut_n_T
     },
     {
         "try_get_mut_r_t",
@@ -3234,6 +3181,30 @@ bake_test_case Entity_testcases[] = {
     {
         "prefab_w_parent_w_name_existing_w_name",
         Entity_prefab_w_parent_w_name_existing_w_name
+    },
+    {
+        "defer_set_parent_to_deleted",
+        Entity_defer_set_parent_to_deleted
+    },
+    {
+        "defer_set_parent_to_deleted_batched",
+        Entity_defer_set_parent_to_deleted_batched
+    },
+    {
+        "defer_set_existing_parent_to_deleted",
+        Entity_defer_set_existing_parent_to_deleted
+    },
+    {
+        "defer_set_existing_parent_to_deleted_batched",
+        Entity_defer_set_existing_parent_to_deleted_batched
+    },
+    {
+        "defer_assign_parent_to_deleted",
+        Entity_defer_assign_parent_to_deleted
+    },
+    {
+        "defer_assign_parent_to_deleted_batched",
+        Entity_defer_assign_parent_to_deleted_batched
     }
 };
 
@@ -4873,6 +4844,14 @@ bake_test_case Query_testcases[] = {
     {
         "copy_operators",
         Query_copy_operators
+    },
+    {
+        "optional_singleton",
+        Query_optional_singleton
+    },
+    {
+        "optional_module",
+        Query_optional_module
     }
 };
 
@@ -6587,6 +6566,10 @@ bake_test_case Module_testcases[] = {
     {
         "delete_module_w_explicit_component_and_system",
         Module_delete_module_w_explicit_component_and_system
+    },
+    {
+        "module_has_singleton",
+        Module_module_has_singleton
     }
 };
 
@@ -6810,10 +6793,6 @@ bake_test_case World_testcases[] = {
         World_implicit_reregister_after_reset
     },
     {
-        "reregister_after_reset_different_name",
-        World_reregister_after_reset_different_name
-    },
-    {
         "register_short_template",
         World_register_short_template
     },
@@ -6872,10 +6851,6 @@ bake_test_case World_testcases[] = {
     {
         "reregister_after_reset_w_hooks_and_in_use_implicit",
         World_reregister_after_reset_w_hooks_and_in_use_implicit
-    },
-    {
-        "register_component_w_reset_in_multithreaded",
-        World_register_component_w_reset_in_multithreaded
     },
     {
         "register_component_w_core_name",
@@ -7144,6 +7119,10 @@ bake_test_case World_testcases[] = {
     {
         "reset_world",
         World_reset_world
+    },
+    {
+        "reset_rest_after_reset",
+        World_reset_set_rest_after_reset
     },
     {
         "id_from_pair_type",
@@ -7475,289 +7454,6 @@ bake_test_case Singleton_testcases[] = {
     {
         "try_get_mut_R_T",
         Singleton_try_get_mut_R_T
-    }
-};
-
-bake_test_case Misc_testcases[] = {
-    {
-        "string_compare_w_char_ptr",
-        Misc_string_compare_w_char_ptr
-    },
-    {
-        "string_compare_w_char_ptr_length_diff",
-        Misc_string_compare_w_char_ptr_length_diff
-    },
-    {
-        "string_compare_w_string",
-        Misc_string_compare_w_string
-    },
-    {
-        "string_view_compare_w_char_ptr",
-        Misc_string_view_compare_w_char_ptr
-    },
-    {
-        "string_view_compare_w_string",
-        Misc_string_view_compare_w_string
-    },
-    {
-        "string_compare_nullptr",
-        Misc_string_compare_nullptr
-    },
-    {
-        "nullptr_string_compare",
-        Misc_nullptr_string_compare
-    },
-    {
-        "nullptr_string_compare_nullptr",
-        Misc_nullptr_string_compare_nullptr
-    },
-    {
-        "c_macros",
-        Misc_c_macros
-    },
-    {
-        "app_run",
-        Misc_app_run
-    },
-    {
-        "app_run_target_fps",
-        Misc_app_run_target_fps
-    },
-    {
-        "app_run_set_frames",
-        Misc_app_run_set_frames
-    },
-    {
-        "app_on_remove_on_fini",
-        Misc_app_on_remove_on_fini
-    },
-    {
-        "member_gauge_metric",
-        Misc_member_gauge_metric
-    },
-    {
-        "id_gauge_metric",
-        Misc_id_gauge_metric
-    },
-    {
-        "oneof_gauge_metric",
-        Misc_oneof_gauge_metric
-    },
-    {
-        "id_counter_metric",
-        Misc_id_counter_metric
-    },
-    {
-        "oneof_counter_metric",
-        Misc_oneof_counter_metric
-    },
-    {
-        "component_mixin_member_metric",
-        Misc_component_mixin_member_metric
-    },
-    {
-        "component_mixin_member_metric_custom_parent_entity",
-        Misc_component_mixin_member_metric_custom_parent_entity
-    },
-    {
-        "metric_description",
-        Misc_metric_description
-    },
-    {
-        "component_mixin_member_metric_description",
-        Misc_component_mixin_member_metric_description
-    },
-    {
-        "member_metric_w_value_name",
-        Misc_member_metric_w_value_name
-    },
-    {
-        "member_metric_w_value_name_camel_case_type",
-        Misc_member_metric_w_value_name_camel_case_type
-    },
-    {
-        "member_metric_w_custom_name",
-        Misc_member_metric_w_custom_name
-    },
-    {
-        "dotmember_metric",
-        Misc_dotmember_metric
-    },
-    {
-        "counter_id_metric",
-        Misc_counter_id_metric
-    },
-    {
-        "counter_target_metric",
-        Misc_counter_target_metric
-    },
-    {
-        "member_metric_w_pair_R_T",
-        Misc_member_metric_w_pair_R_T
-    },
-    {
-        "member_metric_w_pair_R_t",
-        Misc_member_metric_w_pair_R_t
-    },
-    {
-        "member_metric_w_pair_r_t",
-        Misc_member_metric_w_pair_r_t
-    },
-    {
-        "member_metric_w_pair_r_T",
-        Misc_member_metric_w_pair_r_T
-    },
-    {
-        "alert",
-        Misc_alert
-    },
-    {
-        "alert_w_message",
-        Misc_alert_w_message
-    },
-    {
-        "alert_w_brief",
-        Misc_alert_w_brief
-    },
-    {
-        "alert_doc_name",
-        Misc_alert_doc_name
-    },
-    {
-        "alert_severity_info",
-        Misc_alert_severity_info
-    },
-    {
-        "alert_severity_warning",
-        Misc_alert_severity_warning
-    },
-    {
-        "alert_severity_error",
-        Misc_alert_severity_error
-    },
-    {
-        "alert_severity_implicit",
-        Misc_alert_severity_implicit
-    },
-    {
-        "alert_w_retain_period",
-        Misc_alert_w_retain_period
-    },
-    {
-        "alert_w_severity_filter",
-        Misc_alert_w_severity_filter
-    },
-    {
-        "alert_w_severity_filter_severity_type",
-        Misc_alert_w_severity_filter_severity_type
-    },
-    {
-        "alert_w_severity_filter_severity_type_id_type",
-        Misc_alert_w_severity_filter_severity_type_id_type
-    },
-    {
-        "alert_w_severity_filter_severity_type_enum_constant",
-        Misc_alert_w_severity_filter_severity_type_enum_constant
-    },
-    {
-        "alert_w_severity_filter_w_var",
-        Misc_alert_w_severity_filter_w_var
-    },
-    {
-        "alert_w_severity_filter_severity_type_w_var",
-        Misc_alert_w_severity_filter_severity_type_w_var
-    },
-    {
-        "alert_w_severity_filter_severity_type_id_type_w_var",
-        Misc_alert_w_severity_filter_severity_type_id_type_w_var
-    },
-    {
-        "alert_w_severity_filter_severity_type_enum_constant_w_var",
-        Misc_alert_w_severity_filter_severity_type_enum_constant_w_var
-    },
-    {
-        "alert_for_member_range",
-        Misc_alert_for_member_range
-    },
-    {
-        "alert_w_member_range_from_var",
-        Misc_alert_w_member_range_from_var
-    },
-    {
-        "map_api",
-        Misc_map_api
-    },
-    {
-        "get_const_var",
-        Misc_get_const_var
-    },
-    {
-        "get_const_var_struct",
-        Misc_get_const_var_struct
-    },
-    {
-        "get_const_var_as_f32",
-        Misc_get_const_var_as_f32
-    },
-    {
-        "get_const_var_as_i32",
-        Misc_get_const_var_as_i32
-    },
-    {
-        "get_const_var_as_u32",
-        Misc_get_const_var_as_u32
-    },
-    {
-        "get_const_var_w_out",
-        Misc_get_const_var_w_out
-    },
-    {
-        "get_const_var_struct_w_out",
-        Misc_get_const_var_struct_w_out
-    },
-    {
-        "get_const_var_struct_w_out_not_found",
-        Misc_get_const_var_struct_w_out_not_found
-    },
-    {
-        "get_const_var_as_f32_w_out",
-        Misc_get_const_var_as_f32_w_out
-    },
-    {
-        "get_const_var_as_i32_w_out",
-        Misc_get_const_var_as_i32_w_out
-    },
-    {
-        "get_const_var_as_u32_w_out",
-        Misc_get_const_var_as_u32_w_out
-    },
-    {
-        "get_const_var_not_found",
-        Misc_get_const_var_not_found
-    },
-    {
-        "get_const_var_not_a_var",
-        Misc_get_const_var_not_a_var
-    },
-    {
-        "get_scoped_const_var",
-        Misc_get_scoped_const_var
-    },
-    {
-        "get_module_const_var",
-        Misc_get_module_const_var
-    },
-    {
-        "get_module_const_var_from_script_module",
-        Misc_get_module_const_var_from_script_module
-    },
-    {
-        "get_module_const_var_from_nested_script_module",
-        Misc_get_module_const_var_from_nested_script_module
-    },
-    {
-        "get_module_const_var_from_nested_module_no_script_module",
-        Misc_get_module_const_var_from_nested_module_no_script_module
     }
 };
 
@@ -8203,33 +7899,6 @@ bake_test_case Table_testcases[] = {
     }
 };
 
-bake_test_case Doc_testcases[] = {
-    {
-        "set_brief",
-        Doc_set_brief
-    },
-    {
-        "set_name",
-        Doc_set_name
-    },
-    {
-        "set_link",
-        Doc_set_link
-    },
-    {
-        "set_color",
-        Doc_set_color
-    },
-    {
-        "set_uuid",
-        Doc_set_uuid
-    },
-    {
-        "get_name_no_doc_name",
-        Doc_get_name_no_doc_name
-    }
-};
-
 const char* QueryBuilder_cache_kind_param[] = {"default", "auto"};
 bake_test_param QueryBuilder_params[] = {
     {"cache_kind", (char**)QueryBuilder_cache_kind_param, 2}
@@ -8247,7 +7916,7 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        386,
+        396,
         Entity_testcases
     },
     {
@@ -8310,7 +7979,7 @@ static bake_test_suite suites[] = {
         "Query",
         NULL,
         NULL,
-        136,
+        138,
         Query_testcases
     },
     {
@@ -8354,7 +8023,7 @@ static bake_test_suite suites[] = {
         "Module",
         NULL,
         NULL,
-        26,
+        27,
         Module_testcases
     },
     {
@@ -8375,7 +8044,7 @@ static bake_test_suite suites[] = {
         "World",
         NULL,
         NULL,
-        130,
+        128,
         World_testcases
     },
     {
@@ -8384,13 +8053,6 @@ static bake_test_suite suites[] = {
         NULL,
         49,
         Singleton_testcases
-    },
-    {
-        "Misc",
-        Misc_setup,
-        NULL,
-        70,
-        Misc_testcases
     },
     {
         "Meta",
@@ -8405,16 +8067,9 @@ static bake_test_suite suites[] = {
         NULL,
         40,
         Table_testcases
-    },
-    {
-        "Doc",
-        NULL,
-        NULL,
-        6,
-        Doc_testcases
     }
 };
 
 int main(int argc, char *argv[]) {
-    return bake_test_run("cpp", argc, argv, suites, 25);
+    return bake_test_run("cpp", argc, argv, suites, 23);
 }

@@ -465,7 +465,7 @@ error:
 }
 
 bool ecs_query_has(
-    ecs_query_t *q,
+    const ecs_query_t *q,
     ecs_entity_t entity,
     ecs_iter_t *it)
 {
@@ -480,7 +480,7 @@ error:
 }
 
 bool ecs_query_has_table(
-    ecs_query_t *q,
+    const ecs_query_t *q,
     ecs_table_t *table,
     ecs_iter_t *it)
 {
@@ -488,7 +488,8 @@ bool ecs_query_has_table(
     ecs_check(q->flags & EcsQueryMatchThis, ECS_INVALID_PARAMETER, NULL);
 
     if (!flecs_table_bloom_filter_test(table, q->bloom_filter)) {
-        q->eval_count ++;
+        /* Safe, only used for statistics */
+        ECS_CONST_CAST(ecs_query_t*, q)->eval_count ++;
         return false;
     }
 
@@ -500,7 +501,7 @@ error:
 }
 
 bool ecs_query_has_range(
-    ecs_query_t *q,
+    const ecs_query_t *q,
     ecs_table_range_t *range,
     ecs_iter_t *it)
 {
@@ -517,7 +518,8 @@ bool ecs_query_has_range(
     }
 
     if (!flecs_table_bloom_filter_test(table, q->bloom_filter)) {
-        q->eval_count ++;
+        /* Safe, only used for statistics */
+        ECS_CONST_CAST(ecs_query_t*, q)->eval_count ++;
         return false;
     }
 
@@ -670,4 +672,21 @@ void* ecs_query_get_group_ctx(
     } else {
         return info->ctx;
     }
+}
+
+const ecs_map_t* ecs_query_get_groups(
+    const ecs_query_t *query)
+{
+    flecs_poly_assert(query, ecs_query_t);
+    ecs_query_impl_t *q = flecs_query_impl(query);
+    ecs_check(q->cache != NULL, ECS_INVALID_PARAMETER, 
+        "ecs_query_get_groups is not valid for queries that don't use group_by");
+
+    ecs_query_cache_t *cache = q->cache;
+    ecs_check(cache->group_by != 0, ECS_INVALID_PARAMETER,
+        "ecs_query_get_groups is not valid for queries that don't use group_by");
+
+    return &cache->groups;
+error:
+    return NULL;
 }

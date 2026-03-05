@@ -820,7 +820,7 @@ void flecs_emit_forward_table_up(
 
         if (cr == tgt_cr) {
             char *idstr = ecs_id_str(world, cr->id);
-            ecs_assert(cr != tgt_cr, ECS_CYCLE_DETECTED, idstr);
+            ecs_assert(cr != tgt_cr, ECS_CYCLE_DETECTED, "%s", idstr);
             ecs_os_free(idstr);
             return;
         }
@@ -836,6 +836,8 @@ void flecs_emit_forward_table_up(
             if (id == ecs_id(EcsParent)) {
                 const EcsParent *parent = ecs_get(world, tgt, EcsParent);
                 ecs_assert(parent != NULL, ECS_INTERNAL_ERROR, NULL);
+                ecs_assert(parent->value != 0, ECS_INTERNAL_ERROR, NULL);
+
                 cr = flecs_components_get(world, ecs_childof(parent->value));
                 ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
             }
@@ -946,7 +948,7 @@ void flecs_emit_forward_up(
 {
     if (depth >= FLECS_DAG_DEPTH_MAX) {
         char *idstr = ecs_id_str(world, cr->id);
-        ecs_assert(depth < FLECS_DAG_DEPTH_MAX, ECS_CYCLE_DETECTED, idstr);
+        ecs_assert(depth < FLECS_DAG_DEPTH_MAX, ECS_CYCLE_DETECTED, "%s", idstr);
         ecs_os_free(idstr);
         return;
     }
@@ -1363,7 +1365,9 @@ repeat_event:
         }
 
         /* Forward events for Parent component as ChildOf pairs. */
-        if (id == ecs_id(EcsParent) && !table_event) {
+        if (id == ecs_id(EcsParent) && !table_event && 
+            (table->flags & EcsTableHasParent)) 
+        {
             ecs_event_desc_t pdesc = *desc;
 
             pdesc.event = event;
@@ -1380,7 +1384,7 @@ repeat_event:
 
             for (p = 0; p < parent_count; p ++) {
                 ecs_entity_t parent = parents[p].value;
-                if (parent && ecs_is_alive(world, parent)) {
+                if (parent && flecs_entities_is_alive(world, parent)) {
                     ecs_id_t pair = ecs_childof(parent);
                     ecs_type_t type = { .count = 1, .array = &pair };
                     pdesc.ids = &type;

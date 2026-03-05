@@ -308,6 +308,32 @@ ecs_entity_t flecs_rest_entity_from_path(
 }
 
 static
+bool flecs_rest_get_type_info(
+    ecs_world_t *world,
+    ecs_http_reply_t *reply,
+    const char *path)
+{
+    ecs_dbg_2("rest: request type info '%s'", path);
+
+    ecs_entity_t e;
+    if (!(e = flecs_rest_entity_from_path(world, reply, path))) {
+        return true;
+    }
+
+    char *json = ecs_type_info_to_json(world, e);
+    if (!json) {
+        flecs_reply_error(reply, "failed to serialize type info for '%s'", path);
+        reply->code = 500;
+        return true;
+    }
+
+    ecs_strbuf_appendstr(&reply->body, json);
+    ecs_os_free(json);
+
+    return true;
+}
+
+static
 bool flecs_rest_get_component(
     ecs_world_t *world,
     const ecs_http_request_t* req,
@@ -1996,6 +2022,10 @@ bool flecs_rest_reply(
         } else if (!ecs_os_strncmp(req->path, "component/", 10)) {
             return flecs_rest_get_component(world, req, reply, &req->path[10]);
 
+        /* Type info endpoint */
+        } else if (!ecs_os_strncmp(req->path, "type_info/", 10)) {
+            return flecs_rest_get_type_info(world, reply, &req->path[10]);
+
         /* Query endpoint */
         } else if (!ecs_os_strcmp(req->path, "query")) {
             return flecs_rest_get_query(world, req, reply);
@@ -2085,7 +2115,6 @@ ecs_http_server_t* ecs_rest_server_init(
     srv_ctx->world = world;
     srv_ctx->srv = srv;
     srv_ctx->rc = 1;
-    srv_ctx->srv = srv;
 
     /* Set build info on world so clients know which version they're using */
     ecs_id_t build_info = ecs_lookup(world, "flecs.core.BuildInfo");
@@ -2195,6 +2224,7 @@ void FlecsRestImport(
     ECS_MODULE(world, FlecsRest);
 
     ECS_IMPORT(world, FlecsPipeline);
+    ECS_IMPORT(world, FlecsMeta);
 
     ecs_set_name_prefix(world, "Ecs");
 

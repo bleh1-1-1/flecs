@@ -376,7 +376,17 @@ void flecs_component_record_check_constraints(
     (void)tgt;
 
 #ifdef FLECS_DEBUG
+    if (ECS_HAS_ID_FLAG(cr->id, PAIR) && !ECS_IS_PAIR(cr->id)) {
+        return;
+    }
+
     if (ECS_IS_PAIR(cr->id)) {
+        /* Internal role records use (EcsFlag, X). These should not be
+         * validated as regular relationship/target pairs. */
+        if (rel == EcsFlag) {
+            return;
+        }
+
         if (tgt) {
             ecs_assert(tgt != 0, ECS_INTERNAL_ERROR, NULL);
 
@@ -641,7 +651,7 @@ ecs_component_record_t* flecs_component_new(
 
     if (ecs_should_log_1()) {
         char *id_str = ecs_id_str(world, id);
-        ecs_dbg_1("#[green]id#[normal] %s #[green]created", id_str);
+        ecs_dbg_1("#[green]component record#[normal] %s #[green]created", id_str);
         ecs_os_free(id_str);
     }
 
@@ -759,7 +769,7 @@ void flecs_component_free(
 
     if (ecs_should_log_1()) {
         char *id_str = ecs_id_str(world, id);
-        ecs_dbg_1("#[green]id#[normal] %s #[red]deleted", id_str);
+        ecs_dbg_1("#[green]component record#[normal] %s #[red]deleted", id_str);
         ecs_os_free(id_str);
     }
 }
@@ -1035,10 +1045,19 @@ void flecs_component_delete_sparse(
     ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(cr->flags & EcsIdSparse, ECS_INTERNAL_ERROR, NULL);
     int32_t i, count = flecs_sparse_count(cr->sparse);
-    const uint64_t *entities = flecs_sparse_ids(cr->sparse);
-    for (i = 0; i < count; i ++) {
-        ecs_delete(world, entities[i]);
+    if (!count) {
+        return;
     }
+
+    const uint64_t *entities = flecs_sparse_ids(cr->sparse);
+    ecs_entity_t *to_delete = ecs_os_malloc_n(ecs_entity_t, count);
+    ecs_os_memcpy_n(to_delete, entities, ecs_entity_t, count);
+
+    for (i = 0; i < count; i ++) {
+        ecs_delete(world, to_delete[i]);
+    }
+
+    ecs_os_free(to_delete);
 }
 
 ecs_component_record_t* flecs_component_first_next(
@@ -1136,7 +1155,7 @@ void flecs_entities_update_childof_depth(
             ecs_component_record_t *tgt_cr = flecs_components_get(
                 world, ecs_childof(tgt));
             if (!tgt_cr) {
-                return;
+                continue;
             }
 
             flecs_component_update_childof_depth(world, tgt_cr, tgt, r);
@@ -1160,7 +1179,7 @@ void flecs_entities_update_childof_depth(
             ecs_component_record_t *tgt_cr = flecs_components_get(
                 world, ecs_childof(tgt));
             if (!tgt_cr) {
-                return;
+                continue;
             }
 
             ecs_record_t *r = flecs_entities_get(world, tgt);
@@ -1218,14 +1237,16 @@ void flecs_component_update_childof_depth(
 
             EcsParent *data = tgt_table->data.columns[column - 1].data;
             ecs_entity_t parent = data[ECS_RECORD_TO_ROW(tgt_r->row)].value;
-            ecs_assert(parent != 0, ECS_INTERNAL_ERROR, NULL);
+            if (!parent) {
+                new_depth = 0;
+            } else {
+                ecs_component_record_t *cr_parent = flecs_components_get(world,
+                    ecs_childof(parent));
+                ecs_assert(cr_parent != NULL, ECS_INTERNAL_ERROR, NULL);
+                ecs_assert(cr_parent->pair != NULL, ECS_INTERNAL_ERROR, NULL);
 
-            ecs_component_record_t *cr_parent = flecs_components_get(world,
-                ecs_childof(parent));
-            ecs_assert(cr_parent != NULL, ECS_INTERNAL_ERROR, NULL);
-            ecs_assert(cr_parent->pair != NULL, ECS_INTERNAL_ERROR, NULL);
-
-            new_depth = cr_parent->pair->depth + 1;
+                new_depth = cr_parent->pair->depth + 1;
+            }
         } else {
             new_depth = 1;
         }

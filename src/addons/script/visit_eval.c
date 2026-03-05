@@ -8,6 +8,26 @@
 #ifdef FLECS_SCRIPT
 #include "script.h"
 
+static
+bool flecs_script_valid_lookup_path(
+    const char *path)
+{
+    int32_t template_nesting = 0;
+    char ch;
+    for (; (ch = path[0]); path ++) {
+        if (ch == '<') {
+            template_nesting ++;
+        } else if (ch == '>') {
+            template_nesting --;
+            if (template_nesting < 0) {
+                return false;
+            }
+        }
+    }
+
+    return template_nesting == 0;
+}
+
 void flecs_script_eval_error_(
     ecs_script_eval_visitor_t *v,
     ecs_script_node_t *node,
@@ -64,7 +84,7 @@ void flecs_script_with_set_count(
             &v->r->with_type_info, ecs_type_info_t*, i)[0];
         if (ti) {
             if (ti->hooks.dtor) {
-                ti->hooks.dtor(val->ptr, 1, ti);
+                flecs_type_info_dtor(val->ptr, 1, ti);
             }
             flecs_stack_free(val->ptr, ti->size);
         }
@@ -219,17 +239,19 @@ int flecs_script_find_entity(
     ecs_entity_t result = 0;
 
     if (path[0] != '$') {
+        bool valid_path = flecs_script_valid_lookup_path(path);
+
         if (name_expr && *name_expr) {
             result = flecs_script_eval_name_expr(v, NULL, name_expr, true);
             if (!result) {
                 return -1;
             }
-        } else if (from) {
+        } else if (from && valid_path) {
             result = ecs_lookup_path_w_sep(
                 v->world, from, path, NULL, NULL, false);
         } else {
             int32_t i, using_count = ecs_vec_count(&v->r->using);
-            if (using_count) {
+            if (using_count && valid_path) {
                 ecs_entity_t *using = ecs_vec_first(&v->r->using);
                 for (i = using_count - 1; i >= 0; i --) {
                     ecs_entity_t e = ecs_lookup_path_w_sep(
@@ -240,7 +262,7 @@ int flecs_script_find_entity(
                 }
             }
 
-            if (!result) {
+            if (!result && valid_path) {
                 result = ecs_lookup_path_w_sep(
                     v->world, v->parent, path, NULL, NULL, true);
             }
@@ -317,6 +339,10 @@ ecs_entity_t flecs_script_create_entity(
 
     if (v->entity && v->entity->non_fragmenting_parent) {
         desc.id = ecs_new_w_parent(v->world, v->parent, name);
+        ecs_id_t world_with = ecs_get_with(v->world);
+        if (world_with) {
+            ecs_add_id(v->world, desc.id, world_with);
+        }
     } else {
         desc.parent = v->parent;
         desc.name = name;
@@ -853,6 +879,13 @@ int flecs_script_eval_tag(
         return -1;
     }
 
+    if (node->id.eval == ecs_id(EcsParent)) {
+        flecs_script_eval_error(v, node, 
+            "Parent component cannot be added as tag (set to valid parent)",
+            node->id.first, node->id.second);
+        return -1;
+    }
+
     if (!resolved) {
         if (!flecs_script_can_default_ctor(v->world, node->id.eval)) {
             if (node->id.second) {
@@ -947,26 +980,29 @@ int flecs_script_eval_component(
             return -1;
         }
 
+        bool needs_set = ti->hooks.on_replace != NULL;
         ecs_record_t *r = flecs_entities_get(v->world, src);
         ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
         ecs_table_t *table = r->table;
  
         ecs_value_t value = {
-            .ptr = ecs_ensure_id(v->world, src, node->id.eval, 
-                flecs_ito(size_t, ti->size)),
+            .ptr = needs_set 
+                ? ecs_os_alloca(ti->size) 
+                : ecs_ensure_id(v->world, src, node->id.eval, 
+                    flecs_ito(size_t, ti->size)),
             .type = ti->component
         };
 
         /* Assign entire value, including members not set by expression. This 
          * prevents uninitialized or unexpected values. */
-        if (r->table != table) {
+        if (needs_set || (r->table != table)) {
             if (!ti->hooks.ctor) {
                 ecs_os_memset(value.ptr, 0, ti->size);
-            } else if (ti->hooks.ctor) {
-                if (ti->hooks.dtor) {
-                    ti->hooks.dtor(value.ptr, 1, ti);
+            } else {
+                if (!needs_set && ti->hooks.dtor) {
+                    flecs_type_info_dtor(value.ptr, 1, ti);
                 }
-                ti->hooks.ctor(value.ptr, 1, ti);
+                flecs_type_info_ctor(value.ptr, 1, ti);
             }
         }
 
@@ -974,7 +1010,12 @@ int flecs_script_eval_component(
             return -1;
         }
 
-        ecs_modified_id(v->world, src, node->id.eval);
+        if (needs_set) {
+            ecs_set_id(v->world, src, node->id.eval, 
+                flecs_itosize(ti->size), value.ptr);
+        } else {
+            ecs_modified_id(v->world, src, node->id.eval);
+        }
     } else {
         ecs_add_id(v->world, src, node->id.eval);
     }
@@ -996,6 +1037,8 @@ int flecs_script_eval_var_component(
         if (flecs_script_find_entity(
             v, 0, node->name, NULL, NULL, &var_entity, NULL)) 
         {
+            flecs_script_eval_error(v, node, 
+                "unresolved variable '%s'", node->name);
             return -1;
         }
 
@@ -1014,6 +1057,11 @@ int flecs_script_eval_var_component(
 
     if (v->is_with_scope) {
         flecs_script_eval_error(v, node, "invalid component in with scope"); 
+        return -1;
+    }
+
+    if (!v->entity) {
+        flecs_script_eval_error(v, node, "missing entity for variable component");
         return -1;
     }
 
@@ -1160,9 +1208,7 @@ int flecs_script_eval_with_component(
         value->ptr = flecs_stack_alloc(&v->r->stack, ti->size, ti->alignment);
         value->type = ti->component; // Expression parser needs actual type
 
-        if (ti->hooks.ctor) {
-            ti->hooks.ctor(value->ptr, 1, ti);
-        }
+        flecs_type_info_ctor(value->ptr, 1, ti);
 
         if (flecs_script_eval_expr(v, &node->expr, value)) {
             return -1;
@@ -1359,9 +1405,7 @@ int flecs_script_eval_const(
 
         result.ptr = flecs_stack_calloc(&v->r->stack, ti->size, ti->alignment);
 
-        if (ti->hooks.ctor) {
-            ti->hooks.ctor(result.ptr, 1, ti);
-        }
+        flecs_type_info_ctor(result.ptr, 1, ti);
 
         if (flecs_script_eval_expr(v, &node->expr, &result)) {
             flecs_script_eval_error(v, node,
@@ -1388,9 +1432,7 @@ int flecs_script_eval_const(
             &v->r->stack, ti->size, ti->alignment);
         result.type = value.type;
 
-        if (ti->hooks.ctor) {
-            ti->hooks.ctor(result.ptr, 1, ti);
-        }
+        flecs_type_info_ctor(result.ptr, 1, ti);
 
         ecs_value_copy_w_type_info(v->world, ti, result.ptr, value.ptr);
         ecs_value_fini_w_type_info(v->world, ti, value.ptr);
@@ -1415,7 +1457,7 @@ int flecs_script_eval_const(
 
         /* Clean up value since it'll have been copied into the const var. */
         if (ti->hooks.dtor) {
-            ti->hooks.dtor(result.ptr, 1, ti);
+            flecs_type_info_dtor(result.ptr, 1, ti);
         }
 
         flecs_stack_free(result.ptr, ti->size);

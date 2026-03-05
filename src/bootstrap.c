@@ -478,9 +478,16 @@ void flecs_on_component(ecs_iter_t *it) {
         (void)component_id;
 
         if (it->event != EcsOnRemove) {
-            ecs_entity_t parent = ecs_get_target(world, e, EcsChildOf, 0);
+            ecs_entity_t parent = ecs_get_parent(world, e);
             if (parent) {
-                ecs_add_id(world, parent, EcsModule);
+                ecs_record_t *parent_record = flecs_entities_get(world, parent);
+                ecs_table_t *parent_table = parent_record->table;
+                if (!ecs_table_has_id(world, parent_table, EcsModule)) {
+                    if (!ecs_table_has_id(world, parent_table, ecs_id(EcsComponent))) {
+                        ecs_add_id(world, parent, EcsModule);
+                    }
+                }
+
             }
         }
 
@@ -579,6 +586,22 @@ void flecs_disable_module(ecs_iter_t *it) {
 }
 
 static
+void flecs_on_add_prefab(ecs_iter_t *it) {
+    ecs_world_t *world = it->world;
+
+    for (int32_t i = 0; i < it->count; i ++) {
+        ecs_entity_t p = it->entities[i];
+        
+        ecs_iter_t cit = ecs_children(world, p);
+        while (ecs_children_next(&cit)) {
+            for (int32_t j = 0; j < cit.count; j ++) {
+                ecs_add_id(world, cit.entities[j], EcsPrefab);
+            }
+        }
+    }
+}
+
+static
 void flecs_register_ordered_children(ecs_iter_t *it) {
     int32_t i;
     if (it->event == EcsOnAdd) {
@@ -592,7 +615,7 @@ void flecs_register_ordered_children(ecs_iter_t *it) {
                 cr->flags |= EcsIdOrderedChildren;
             }
         }
-    } else if (!(it->real_world->flags & EcsWorldFini)) {
+    } else if (!(it->real_world->flags & EcsWorldFini) && it->other_table) {
         ecs_assert(it->event == EcsOnRemove, ECS_INTERNAL_ERROR, NULL);
         for (i = 0; i < it->count; i ++) {
             ecs_entity_t parent = it->entities[i];
@@ -632,12 +655,13 @@ void flecs_bootstrap_builtin(
         world, &world->store.root, ECS_RECORD_TO_ROW(record->row), false);
     record->table = table;
 
-    int32_t index = flecs_table_append(world, table, entity, false, false);
-    record->row = ECS_ROW_TO_RECORD(index, 0);
+    int32_t row = ecs_table_count(table);
+    flecs_table_append(world, table, entity, false, false);
+    record->row = ECS_ROW_TO_RECORD(row, 0);
 
     EcsComponent *component = columns[0].data;
-    component[index].size = size;
-    component[index].alignment = alignment;
+    component[row].size = size;
+    component[row].alignment = alignment;
 
     const char *name = &symbol[3]; /* Strip 'Ecs' */
     ecs_size_t symbol_length = ecs_os_strlen(symbol);
@@ -645,21 +669,21 @@ void flecs_bootstrap_builtin(
 
     EcsIdentifier *name_col = columns[1].data;
     uint64_t name_hash = flecs_hash(name, name_length);
-    name_col[index].value = ecs_os_strdup(name);
-    name_col[index].length = name_length;
-    name_col[index].hash = name_hash;
-    name_col[index].index_hash = 0;
+    name_col[row].value = ecs_os_strdup(name);
+    name_col[row].length = name_length;
+    name_col[row].hash = name_hash;
+    name_col[row].index_hash = 0;
 
     ecs_hashmap_t *name_index = flecs_table_get_name_index(world, table);
-    name_col[index].index = name_index;
+    name_col[row].index = name_index;
     flecs_name_index_ensure(name_index, entity, name, name_length, name_hash);
 
     EcsIdentifier *symbol_col = columns[2].data;
-    symbol_col[index].value = ecs_os_strdup(symbol);
-    symbol_col[index].length = symbol_length;
-    symbol_col[index].hash = flecs_hash(symbol, symbol_length);    
-    symbol_col[index].index_hash = 0;
-    symbol_col[index].index = NULL;
+    symbol_col[row].value = ecs_os_strdup(symbol);
+    symbol_col[row].length = symbol_length;
+    symbol_col[row].hash = flecs_hash(symbol, symbol_length);    
+    symbol_col[row].index_hash = 0;
+    symbol_col[row].index = NULL;
 }
 
 /** Initialize component table. This table is manually constructed to bootstrap
@@ -947,7 +971,6 @@ void flecs_bootstrap(
     flecs_bootstrap_tag(world, EcsObserver);
 
     flecs_bootstrap_tag(world, EcsModule);
-    flecs_bootstrap_tag(world, EcsPrivate);
     flecs_bootstrap_tag(world, EcsPrefab);
     flecs_bootstrap_tag(world, EcsSlotOf);
     flecs_bootstrap_tag(world, EcsDisabled);
@@ -1223,6 +1246,16 @@ void flecs_bootstrap(
         .global_observer = true
     });
 
+    /* Observer that ensures children of a prefab are also prefabs */
+    ecs_observer(world, {
+        .query.terms = {
+            { .id = EcsPrefab },
+        },
+        .events = {EcsOnAdd},
+        .callback = flecs_on_add_prefab,
+        .global_observer = true
+    });
+
     /* Exclusive properties */
     ecs_add_id(world, EcsChildOf, EcsExclusive);
     ecs_add_id(world, EcsOnDelete, EcsExclusive);
@@ -1268,6 +1301,9 @@ void flecs_bootstrap(
 
     /* DontFragment components are always sparse */
     ecs_add_pair(world, EcsDontFragment, EcsWith, EcsSparse);
+    
+    /* Modules are singletons */
+    ecs_add_pair(world, EcsModule, EcsWith, EcsSingleton);
 
     /* DontInherit components */
     ecs_add_pair(world, EcsPrefab, EcsOnInstantiate, EcsDontInherit);
@@ -1288,10 +1324,6 @@ void flecs_bootstrap(
     /* Exclusive properties */
     ecs_add_id(world, EcsSlotOf, EcsExclusive);
     ecs_add_id(world, EcsOneOf, EcsExclusive);
-
-    /* Private properties */
-    ecs_add_id(world, ecs_id(EcsPoly), EcsPrivate);
-    ecs_add_id(world, ecs_id(EcsIdentifier), EcsPrivate);
 
     /* Inherited components */
     ecs_add_pair(world, EcsIsA, EcsOnInstantiate, EcsInherit);

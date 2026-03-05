@@ -637,6 +637,20 @@ void Entity_get_T(void) {
     test_int(p.y, 20);
 }
 
+void Entity_get_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    const auto [p, v] = e.get_n<Position, Velocity>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+    test_int(v.x, 1);
+    test_int(v.y, 2);
+}
+
 void Entity_get_r_t(void) {
     flecs::world world;
 
@@ -794,6 +808,32 @@ void Entity_try_get_T(void) {
     test_int(p->y, 20);
 }
 
+void Entity_try_get_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    {
+        const auto [p, v] = e.try_get_n<Position, Velocity>();
+        test_assert(p == nullptr);
+        test_assert(v == nullptr);
+    }
+
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    {
+        const auto [p, v] = e.try_get_n<Position, Velocity>();
+        test_assert(p != nullptr);
+        test_assert(v != nullptr);
+
+        test_int(p->x, 10);
+        test_int(p->y, 20);
+        test_int(v->x, 1);
+        test_int(v->y, 2);
+    }
+}
+
 void Entity_try_get_r_t(void) {
     flecs::world world;
 
@@ -889,6 +929,22 @@ void Entity_get_mut_T(void) {
     Position& p = e.get_mut<Position>();
     test_int(p.x, 10);
     test_int(p.y, 20);
+}
+
+void Entity_get_mut_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    auto [p, v] = e.get_mut_n<Position, Velocity>();
+    p.x += 15;
+    v.y += 2;
+    test_int(e.get<Position>().x, 25);
+    test_int(e.get<Position>().y, 20);
+    test_int(e.get<Velocity>().x, 1);
+    test_int(e.get<Velocity>().y, 4);
 }
 
 void Entity_get_mut_r_t(void) {
@@ -1047,6 +1103,35 @@ void Entity_try_get_mut_T(void) {
 
     test_int(p->x, 10);
     test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    {
+        auto [p, v] = e.try_get_mut_n<Position, Velocity>();
+        test_assert(p == nullptr);
+        test_assert(v == nullptr);
+    }
+
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    {
+        auto [p, v] = e.try_get_mut_n<Position, Velocity>();
+        test_assert(p != nullptr);
+        test_assert(v != nullptr);
+
+        p->x += 15;
+        v->y += 2;
+
+        test_int(e.get<Position>().x, 25);
+        test_int(e.get<Position>().y, 20);
+        test_int(e.get<Velocity>().x, 1);
+        test_int(e.get<Velocity>().y, 4);
+    }
 }
 
 void Entity_try_get_mut_r_t(void) {
@@ -7104,4 +7189,108 @@ void Entity_prefab_w_parent_w_name_existing_w_name(void) {
 
     test_assert(world.lookup("Foo") == f);
     test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_defer_set_parent_to_deleted(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity child = world.entity();
+
+    world.defer_begin();
+    parent.destruct();
+    child.set(flecs::Parent{parent});
+    world.defer_end();
+
+    test_assert(!parent.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_set_parent_to_deleted_batched(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity child = world.entity();
+
+    world.defer_begin();
+    parent.destruct();
+    child.set(Position{10, 20});
+    child.set(flecs::Parent{parent});
+    child.set(Velocity{1, 2});
+    world.defer_end();
+
+    test_assert(!parent.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_set_existing_parent_to_deleted(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.set(flecs::Parent{parent_b});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_set_existing_parent_to_deleted_batched(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.set(Position{10, 20});
+    child.set(flecs::Parent{parent_b});
+    child.set(Velocity{1, 2});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_assign_parent_to_deleted(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.assign(flecs::Parent{parent_b});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_assign_parent_to_deleted_batched(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.set(Position{10, 20});
+    child.assign(flecs::Parent{parent_b});
+    child.set(Velocity{1, 2});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
 }

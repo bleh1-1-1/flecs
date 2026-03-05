@@ -54,6 +54,18 @@ ECS_PRIVATE
     double z;
 });
 
+ECS_STRUCT(Struct_w_only_private, {
+ECS_PRIVATE
+    double z;
+});
+
+struct Struct_w_fwd_decl;
+
+ECS_STRUCT(Struct_w_fwd_decl, {
+ECS_PRIVATE
+    struct Struct_w_fwd_decl *ptr;
+});
+
 ECS_ENUM(Enum_Default, {
     Red, Green, Blue
 });
@@ -450,6 +462,23 @@ void MetaUtils_private_members(void) {
     ecs_fini(world);
 }
 
+void MetaUtils_only_private_members(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_META_COMPONENT(world, Struct_w_only_private);
+
+    test_assert(ecs_id(Struct_w_only_private) != 0);
+    ecs_entity_t e = ecs_id(Struct_w_only_private);
+
+    const EcsStruct *s = ecs_get(world, e, EcsStruct);
+    test_int(ecs_vec_count(&s->members), 0);
+
+    test_assert(ecs_has(world, e, EcsComponent));
+    test_int(ecs_get(world, e, EcsComponent)->size, 8);
+
+    ecs_fini(world);
+}
+
 void MetaUtils_enum_constant_w_name_prefix(void) {
     ecs_world_t *world = ecs_init();
 
@@ -543,6 +572,20 @@ void MetaUtils_struct_has_member_entities(void) {
 
     test_assert(ecs_lookup(world, "Struct_2_i32.x") == 0);
     test_assert(ecs_lookup(world, "Struct_2_i32.y") == 0);
+
+    ecs_fini(world);
+}
+
+void MetaUtils_fwd_decl(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_META_COMPONENT(world, Struct_w_fwd_decl);
+    
+    Struct_w_fwd_decl v1 = {NULL};
+    Struct_w_fwd_decl v2 = {&v1}; /* Ensure fwd decl can be used without warnings */
+    (void)v2;
+
+    test_assert(true);
 
     ecs_fini(world);
 }

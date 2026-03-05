@@ -55,6 +55,20 @@ ecs_expr_variable_t* flecs_expr_variable_from(
     return result;
 }
 
+ecs_expr_member_t* flecs_expr_member_from(
+    ecs_script_t *script,
+    ecs_expr_node_t *node,
+    const char *name)
+{
+    ecs_expr_member_t *result = flecs_calloc_t(
+        &flecs_script_impl(script)->allocator, ecs_expr_member_t);
+    result->node.kind = EcsExprMember;
+    result->node.pos = node->pos;
+    result->left = node;
+    result->member_name =name;
+    return result;
+}
+
 ecs_expr_value_node_t* flecs_expr_bool(
     ecs_parser_t *parser,
     bool value)
@@ -79,6 +93,8 @@ ecs_expr_value_node_t* flecs_expr_char(
         char ch = 0;
         const char *ptr = flecs_chrparse(value, &ch);
         if(!ptr) {
+            flecs_free_t(
+                &parser->script->allocator, ecs_expr_value_node_t, result);
             return NULL;
         }
         result->storage.char_ = ch;
@@ -136,6 +152,7 @@ ecs_expr_value_node_t* flecs_expr_string(
     result->node.type = ecs_id(ecs_string_t);
 
     if (!flecs_string_escape(str)) {
+        flecs_free_t(&parser->script->allocator, ecs_expr_value_node_t, result);
         return NULL;
     }
 
