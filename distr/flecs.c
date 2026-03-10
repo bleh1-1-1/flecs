@@ -16189,7 +16189,9 @@ repeat_event:
 
         int32_t ider_i, ider_count = 0;
         ecs_component_record_t *cr = flecs_components_get(world, id);
-        ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
+        if (!cr) {
+            continue;
+        }
         ecs_flags32_t cr_flags = cr->flags;
 
         /* Check if this id is a pair of an traversable relationship. If so, we 
@@ -16323,7 +16325,9 @@ repeat_event:
 
             if (non_trivial_set) {
                 ecs_component_record_t *cr = flecs_components_get(world, id);
-                ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
+                if (!cr) {
+                    continue;
+                }
                 const ecs_type_info_t *ti = cr->type_info;;
                 ecs_flags32_t cr_flags = cr->flags;
 
@@ -17028,6 +17032,7 @@ void flecs_multi_observer_invoke(
         ecs_assert(pivot_field < user_it.field_count, ECS_INTERNAL_ERROR, NULL);
         user_it.ids[pivot_field] = it->event_id;
         user_it.trs[pivot_field] = it->trs[0];
+        user_it.sources[pivot_field] = it->sources[0];
         user_it.term_index = pivot_term;
 
         user_it.ctx = o->ctx;
@@ -18721,20 +18726,26 @@ void flecs_dump_backtrace(
     SYMBOL_INFO *symbol;
     HANDLE hProcess = GetCurrentProcess();
 
-    SymInitialize(hProcess, NULL, TRUE);
+    if (!SymInitialize(hProcess, NULL, TRUE)) {
+        return;
+    }
 
     frames = CaptureStackBackTrace(0, ECS_BT_BUF_SIZE, stack, NULL);
-    symbol = (SYMBOL_INFO*)ecs_os_malloc(
+    symbol = (SYMBOL_INFO*)ecs_os_calloc(
         sizeof(SYMBOL_INFO) + 256 * sizeof(char));
     symbol->MaxNameLen = 255;
     symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
 
     for (int i = 0; i < frames; i++) {
-        SymFromAddr(hProcess, (DWORD)(uintptr_t)stack[i], NULL, symbol);
-        fprintf(stream, "%s\n", symbol->Name);
+        if (SymFromAddr(hProcess, (DWORD64)(uintptr_t)stack[i], NULL, symbol)) {
+            fprintf(stream, "%s\n", symbol->Name);
+        } else {
+            fprintf(stream, "%p\n", stack[i]);
+        }
     }
 
     ecs_os_free(symbol);
+    SymCleanup(hProcess);
 }
 
 #elif HAVE_EXECINFO
@@ -24853,7 +24864,7 @@ static ecs_app_frame_action_t frame_action = flecs_default_frame_action;
 static ecs_app_desc_t ecs_app_desc;
 
 /* Serve REST API from wasm image when running in emscripten */
-#ifdef ECS_TARGET_EM
+#if defined(ECS_TARGET_EM) && defined(FLECS_REST)
 #include <emscripten.h>
 
 ecs_http_server_t *flecs_wasm_rest_server = NULL;
@@ -25257,10 +25268,21 @@ char* ecs_cpp_get_symbol_name(
     const char *type_name,
     size_t len)
 {
+    ecs_assert(type_name != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (!len) {
+        len = flecs_itosize(ecs_os_strlen(type_name));
+    }
+
+    if (!symbol_name) {
+        symbol_name = ecs_os_malloc_n(char, flecs_uto(int32_t, len + 1));
+        ecs_assert(symbol_name != NULL, ECS_OUT_OF_MEMORY, NULL);
+    }
+
     const char *ptr;
     size_t i;
     for (i = 0, ptr = type_name; i < len && *ptr; i ++, ptr ++) {
-        if (*ptr == ':') {
+        if (*ptr == ':' && ptr[1] == ':') {
             symbol_name[i] = '.';
             ptr ++;
         } else {
@@ -25366,38 +25388,39 @@ const char* ecs_cpp_trim_module(
 
 ecs_entity_t ecs_cpp_component_register(
     ecs_world_t *world,
-    ecs_entity_t id,
-    int32_t ids_index,
-    const char *name,
-    const char *cpp_name,
-    const char *cpp_symbol,
-    size_t size,
-    size_t alignment,
-    bool is_component,
-    bool explicit_registration,
-    bool *registered_out,
-    bool *existing_out)
+    const ecs_cpp_component_desc_t *desc)
 {
-    ecs_assert(registered_out != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(existing_out != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(desc != NULL, ECS_INVALID_PARAMETER, NULL);
+    const char *name = desc->name;
+    const char *cpp_symbol = desc->cpp_symbol;
 
-    ecs_entity_t c = flecs_component_ids_get(world, ids_index);
+    bool existing = false;
+    ecs_entity_t c = flecs_component_ids_get(world, desc->ids_index);
 
     if (!c || !ecs_is_alive(world, c)) {
     } else {
         return c;
     }
 
+    ecs_assert(desc->cpp_name != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    if (!desc->cpp_symbol) {
+        ecs_size_t len = ecs_os_strlen(desc->cpp_name);
+        char *symbol_name = ecs_os_alloca_n(char, len + 1);
+        cpp_symbol = ecs_cpp_get_symbol_name(
+            symbol_name, desc->cpp_name, flecs_itosize(len));
+    }
+
     const char *user_name = NULL;
     bool implicit_name = true;
     ecs_entity_t module = 0;
 
-    if (explicit_registration) {
-        user_name = name;
+    if (desc->explicit_registration) {
+        user_name = desc->name;
         implicit_name = false;
 
         if (!user_name) {
-            user_name = cpp_name;
+            user_name = desc->cpp_name;
         
             /* Keep track of whether name was explicitly set. If not, and 
              * the component was already registered, just use the registered 
@@ -25444,11 +25467,11 @@ ecs_entity_t ecs_cpp_component_register(
      * or entity has been registered with this name. Ensure component is 
      * looked up from root. */
     ecs_entity_t prev_scope = ecs_set_scope(world, 0);
-    if (id) {
-        c = id;
+    if (desc->id) {
+        c = desc->id;
     } else {
         c = ecs_lookup_path_w_sep(world, 0, user_name, "::", "::", false);
-        *existing_out = c != 0 && ecs_has(world, c, EcsComponent);
+        existing = c != 0 && ecs_has(world, c, EcsComponent);
     }
     ecs_set_scope(world, prev_scope);
 
@@ -25487,8 +25510,8 @@ ecs_entity_t ecs_cpp_component_register(
                     ecs_abort(ECS_NAME_IN_USE, NULL);
                 }
 
-                if (flecs_itosize(component->size) != size || 
-                    flecs_itosize(component->alignment) != alignment)
+                if (flecs_itosize(component->size) != desc->size || 
+                    flecs_itosize(component->alignment) != desc->alignment)
                 {
                     ecs_err(
                         "component with name '%s' is already registered with"\
@@ -25506,7 +25529,7 @@ ecs_entity_t ecs_cpp_component_register(
      * registered under a different name. */
     } else if (!implicit_name) {
         c = ecs_lookup_symbol(world, cpp_symbol, false, false);
-        ecs_assert(c == 0 || (c == id), 
+        ecs_assert(c == 0 || (c == desc->id), 
             ECS_INCONSISTENT_COMPONENT_ID, "%s", cpp_symbol);
     }
 
@@ -25538,21 +25561,21 @@ ecs_entity_t ecs_cpp_component_register(
             if (e) {
                 existing_name = ecs_get_path_w_sep(world, 0, e, "::", "::");
                 name = existing_name;
-                *existing_out = true;
+                existing = true;
             } else {
                 /* If type is not yet known, derive from type name */
-                name = ecs_cpp_trim_module(world, cpp_name);
+                name = ecs_cpp_trim_module(world, desc->cpp_name);
             }
         }
     } else {
         /* If an explicit id is provided but it has no name, inherit
          * the name from the type. */
         if (!ecs_is_valid(world, c) || !ecs_get_name(world, c)) {
-            name = ecs_cpp_trim_module(world, cpp_name);
+            name = ecs_cpp_trim_module(world, desc->cpp_name);
         }
     }
 
-    if (is_component || size != 0) {
+    if (desc->is_component || desc->size != 0) {
         c = ecs_entity(world, {
             .id = c,
             .name = name,
@@ -25567,8 +25590,8 @@ ecs_entity_t ecs_cpp_component_register(
 
         c = ecs_component_init(world, &(ecs_component_desc_t){
             .entity = c,
-            .type.size = flecs_uto(int32_t, size),
-            .type.alignment = flecs_uto(int32_t, alignment)
+            .type.size = flecs_uto(int32_t, desc->size),
+            .type.alignment = flecs_uto(int32_t, desc->alignment)
         });
 
         ecs_assert(c != 0, ECS_INVALID_OPERATION, 
@@ -25591,9 +25614,15 @@ ecs_entity_t ecs_cpp_component_register(
     ecs_set_scope(world, prev_scope);
 
     /* Set world local component id */
-    flecs_component_ids_set(world, ids_index, c);
+    flecs_component_ids_set(world, desc->ids_index, c);
 
-    *registered_out = true;
+    if (desc->lifecycle_action && desc->size && !existing) {
+        desc->lifecycle_action(world, c);
+    }
+
+    if (desc->enum_action) {
+       desc->enum_action(world, c);
+    }
 
     return c;
 }
@@ -37359,6 +37388,10 @@ int flecs_term_ref_lookup(
     }
 
     if (!e) {
+        e = ecs_lookup_symbol(world, name, false, false);
+    }
+
+    if (!e) {
         if (ctx->query && (ctx->query->flags & EcsQueryAllowUnresolvedByName)) {
             ref->id |= EcsIsName;
             ref->id &= ~EcsIsEntity;
@@ -46188,8 +46221,6 @@ void flecs_add_overrides_for_base(
                     int32_t column = flecs_type_find(dst_type, wc);
                     if (column == -1) {
                         flecs_type_add(world, dst_type, to_add);
-                    } else {
-                        dst_type->array[column] = to_add;
                     }
                 }
             }
@@ -61360,11 +61391,16 @@ repeat_skip_whitespace_comment:
                 return NULL;
             }
 
-            if (parser->significant_newline && pos[0] == '\n' &&
-                flecs_newline_followed_by_comment(parser, pos))
+            const char *newline = pos;
+            if (newline[0] == '\r' && newline[1] == '\n') {
+                newline ++;
+            }
+
+            if (parser->significant_newline && newline[0] == '\n' &&
+                flecs_newline_followed_by_comment(parser, newline))
             {
                 return flecs_scan_significant_line_comment_newline_run(
-                    parser, pos);
+                    parser, newline);
             }
 
             goto repeat_skip_whitespace_comment;
@@ -75907,6 +75943,10 @@ ecs_entity_t flecs_run_system(
     qit.callback_ctx = system_data->callback_ctx;
     qit.run_ctx = system_data->run_ctx;
 
+    if (system_data->group_id_set) {
+        ecs_iter_set_group(&qit, system_data->group_id);
+    }
+
     if (stage_count > 1 && system_data->multi_threaded) {
         wit = ecs_worker_iter(it, stage_index, stage_count);
         it = &wit;
@@ -76237,6 +76277,23 @@ const ecs_system_t* ecs_system_get(
     ecs_entity_t entity)
 {
     return flecs_poly_get(world, entity, ecs_system_t);
+}
+
+void ecs_system_set_group(
+    ecs_world_t *world,
+    ecs_entity_t system,
+    uint64_t group_id)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(system != 0, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_system_t *system_data = flecs_poly_get(world, system, ecs_system_t);
+    ecs_check(system_data != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    system_data->group_id = group_id;
+    system_data->group_id_set = true;
+error:
+    return;
 }
 
 void FlecsSystemImport(
@@ -84914,18 +84971,29 @@ bool flecs_query_sparse_with_id(
     if (!redo) {
         ecs_component_record_t *cr = flecs_components_get(ctx->world, id);
         if (!cr) {
-            return false;
+            goto no_sparse;
         }
 
-        op_ctx->sparse = cr->sparse;
-        if (!op_ctx->sparse) {
-            return false;
+        ecs_sparse_t *sparse = cr->sparse;
+        if (!sparse || !flecs_sparse_count(sparse)) {
+            goto no_sparse;
         }
 
+        op_ctx->sparse = sparse;
         flecs_query_sparse_init_range(op, ctx, op_ctx);
+    } else {
+        if (!op_ctx->range.table) {
+            return false;
+        }
     }
 
     return flecs_query_sparse_next_entity(op, ctx, op_ctx, not, ptr_out);
+no_sparse:
+    op_ctx->sparse = NULL;
+    op_ctx->range.table = NULL;
+    op_ctx->range.offset = 0;
+    op_ctx->range.count = 0;
+    return not;
 }
 
 static

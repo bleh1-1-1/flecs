@@ -345,6 +345,7 @@ void Event_emit_staged_from_stage(void);
 void Event_emit_staged_from_world_observer(void);
 void Event_emit_staged_from_stage_observer(void);
 void Event_emit_for_entity(void);
+void Event_emit_for_unused_observed_id(void);
 void Event_emit_custom_for_any(void);
 void Event_emit_custom_implicit_any(void);
 void Event_emit_custom_empty_type(void);
@@ -355,6 +356,8 @@ void Event_emit_nested(void);
 void Event_emit_for_empty_entity(void);
 void Event_enqueue_event_1_id(void);
 void Event_enqueue_event_2_ids(void);
+void Event_enqueue_event_for_id_removed_before_merge(void);
+void Event_enqueue_event_for_deleted_id_before_merge(void);
 void Event_enqueue_event_w_data(void);
 void Event_enqueue_event_w_data_move(void);
 void Event_enqueue_event_w_data_copy(void);
@@ -2210,6 +2213,7 @@ void Observer_up_forward_w_parent_component_reparent(void);
 void Observer_self_up_forward_w_parent_component_reparent(void);
 void Observer_up_propagate_w_parent_component_on_set(void);
 void Observer_self_up_propagate_w_parent_component_on_set(void);
+void Observer_parent_on_set_w_exclusive_pair(void);
 void Observer_cache_test_1(void);
 void Observer_cache_test_2(void);
 void Observer_cache_test_3(void);
@@ -2538,6 +2542,7 @@ void Prefab_create_instances_w_override_and_on_set(void);
 void Prefab_remove_all(void);
 void Prefab_delete_with(void);
 void Prefab_prefab_children_after_adding_prefab(void);
+void Prefab_add_base_w_exclusive_override(void);
 
 // Testsuite 'World'
 void World_setup(void);
@@ -3211,6 +3216,7 @@ void Error_log_log(void);
 void Error_log_warning(void);
 void Error_log_error(void);
 void Error_set_log_level_return(void);
+void Error_print_backtrace(void);
 
 // Testsuite 'StackAlloc'
 void StackAlloc_init_fini(void);
@@ -4537,6 +4543,10 @@ bake_test_case Event_testcases[] = {
         Event_emit_for_entity
     },
     {
+        "emit_for_unused_observed_id",
+        Event_emit_for_unused_observed_id
+    },
+    {
         "emit_custom_for_any",
         Event_emit_custom_for_any
     },
@@ -4575,6 +4585,14 @@ bake_test_case Event_testcases[] = {
     {
         "enqueue_event_2_ids",
         Event_enqueue_event_2_ids
+    },
+    {
+        "enqueue_event_for_id_removed_before_merge",
+        Event_enqueue_event_for_id_removed_before_merge
+    },
+    {
+        "enqueue_event_for_deleted_id_before_merge",
+        Event_enqueue_event_for_deleted_id_before_merge
     },
     {
         "enqueue_event_w_data",
@@ -11845,6 +11863,10 @@ bake_test_case Observer_testcases[] = {
         Observer_self_up_propagate_w_parent_component_on_set
     },
     {
+        "parent_on_set_w_exclusive_pair",
+        Observer_parent_on_set_w_exclusive_pair
+    },
+    {
         "cache_test_1",
         Observer_cache_test_1
     },
@@ -13117,6 +13139,10 @@ bake_test_case Prefab_testcases[] = {
     {
         "prefab_children_after_adding_prefab",
         Prefab_prefab_children_after_adding_prefab
+    },
+    {
+        "add_base_w_exclusive_override",
+        Prefab_add_base_w_exclusive_override
     }
 };
 
@@ -15730,6 +15756,10 @@ bake_test_case Error_testcases[] = {
     {
         "set_log_level_return",
         Error_set_log_level_return
+    },
+    {
+        "print_backtrace",
+        Error_print_backtrace
     }
 };
 
@@ -15789,7 +15819,7 @@ static bake_test_suite suites[] = {
         "Event",
         NULL,
         NULL,
-        36,
+        39,
         Event_testcases
     },
     {
@@ -15959,7 +15989,7 @@ static bake_test_suite suites[] = {
         "Observer",
         NULL,
         NULL,
-        327,
+        328,
         Observer_testcases
     },
     {
@@ -16001,7 +16031,7 @@ static bake_test_suite suites[] = {
         "Prefab",
         Prefab_setup,
         NULL,
-        196,
+        197,
         Prefab_testcases
     },
     {
@@ -16078,7 +16108,7 @@ static bake_test_suite suites[] = {
         "Error",
         Error_setup,
         NULL,
-        12,
+        13,
         Error_testcases
     },
     {

@@ -17,44 +17,39 @@ namespace flecs {
 
 namespace _ {
 
-// Translate a typename into a language-agnostic identifier. This allows for
-// registration of components/modules across language boundaries.
 template <typename T>
-inline const char* symbol_name() {
-    static const size_t len = ECS_FUNC_TYPE_LEN(const char*, symbol_name, ECS_FUNC_NAME);
-    static char result[len + 1] = {};
-    static const char* cppSymbolName = ecs_cpp_get_symbol_name(result, type_name<T>(), len);
-    return cppSymbolName;
+inline const char* component_symbol_name() {
+    return nullptr;
 }
 
-template <> inline const char* symbol_name<uint8_t>() {
+template <> inline const char* component_symbol_name<uint8_t>() {
     return "u8";
 }
-template <> inline const char* symbol_name<uint16_t>() {
+template <> inline const char* component_symbol_name<uint16_t>() {
     return "u16";
 }
-template <> inline const char* symbol_name<uint32_t>() {
+template <> inline const char* component_symbol_name<uint32_t>() {
     return "u32";
 }
-template <> inline const char* symbol_name<uint64_t>() {
+template <> inline const char* component_symbol_name<uint64_t>() {
     return "u64";
 }
-template <> inline const char* symbol_name<int8_t>() {
+template <> inline const char* component_symbol_name<int8_t>() {
     return "i8";
 }
-template <> inline const char* symbol_name<int16_t>() {
+template <> inline const char* component_symbol_name<int16_t>() {
     return "i16";
 }
-template <> inline const char* symbol_name<int32_t>() {
+template <> inline const char* component_symbol_name<int32_t>() {
     return "i32";
 }
-template <> inline const char* symbol_name<int64_t>() {
+template <> inline const char* component_symbol_name<int64_t>() {
     return "i64";
 }
-template <> inline const char* symbol_name<float>() {
+template <> inline const char* component_symbol_name<float>() {
     return "f32";
 }
-template <> inline const char* symbol_name<double>() {
+template <> inline const char* component_symbol_name<double>() {
     return "f64";
 }
 
@@ -94,6 +89,25 @@ void register_lifecycle_actions(
 }
 
 template <typename T>
+inline ecs_cpp_type_action_t lifecycle_action() {
+    if constexpr (std::is_trivial<T>::value) {
+        return nullptr;
+    } else {
+        return &register_lifecycle_actions<T>;
+    }
+}
+
+template <typename T>
+inline ecs_cpp_type_action_t enum_action() {
+#if FLECS_CPP_ENUM_REFLECTION_SUPPORT
+    if constexpr (is_enum_v<T>) {
+        return &_::init_enum<T>;
+    }
+#endif
+    return nullptr;
+}
+
+template <typename T>
 struct type_impl {
     static_assert(is_pointer<T>::value == false,
         "pointer types are not allowed for components");
@@ -104,7 +118,6 @@ struct type_impl {
     {
         index(); // Make sure global component index is initialized
 
-        s_allow_tag = allow_tag;
         s_size = sizeof(T);
         s_alignment = alignof(T);
         if (is_empty<T>::value && allow_tag) {
@@ -134,30 +147,23 @@ struct type_impl {
         init(allow_tag);
         ecs_assert(index() != 0, ECS_INTERNAL_ERROR, NULL);
 
-        bool registered = false, existing = false;
+        ecs_cpp_component_desc_t desc = {
+            id,
+            index(),
+            name,
+            type_name<T>(),
+            component_symbol_name<T>(),
+            size(),
+            alignment(),
+            lifecycle_action<T>(),
+            enum_action<T>(),
+            is_component,
+            explicit_registration
+        };
 
-        flecs::entity_t c = ecs_cpp_component_register(
-            world, id, index(), name, type_name<T>(), 
-            symbol_name<T>(), size(), alignment(),
-            is_component, explicit_registration, &registered, &existing);
+        flecs::entity_t c = ecs_cpp_component_register(world, &desc);
 
         ecs_assert(c != 0, ECS_INTERNAL_ERROR, NULL);
-
-        if (registered) {
-            // Register lifecycle callbacks, but only if the component has a
-            // size. Components that don't have a size are tags, and tags don't
-            // require construction/destruction/copy/move's.
-            if (size() && !existing) {
-                register_lifecycle_actions<T>(world, c);
-            }
-
-            // If component is enum type, register constants. Make sure to do 
-            // this after setting the component id, because the enum code will
-            // be calling type<T>::id().
-            #if FLECS_CPP_ENUM_REFLECTION_SUPPORT
-            _::init_enum<T>(world, c);
-            #endif
-        }
 
         return c;
     }
@@ -212,7 +218,6 @@ struct type_impl {
     static void reset() {
         s_size = 0;
         s_alignment = 0;
-        s_allow_tag = true;
     }
 
     static int32_t index() {
@@ -222,13 +227,11 @@ struct type_impl {
 
     static size_t s_size;
     static size_t s_alignment;
-    static bool s_allow_tag;
 };
 
 // Global templated variables that hold component identifier and other info
 template <typename T> inline size_t   type_impl<T>::s_size;
 template <typename T> inline size_t   type_impl<T>::s_alignment;
-template <typename T> inline bool     type_impl<T>::s_allow_tag( true );
 
 // Front facing class for implicitly registering a component & obtaining
 // static component data

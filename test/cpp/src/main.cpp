@@ -652,6 +652,7 @@ void System_register_twice_w_each(void);
 void System_register_twice_w_run(void);
 void System_register_twice_w_run_each(void);
 void System_register_twice_w_each_run(void);
+void System_set_group(void);
 void System_run_w_0_src_query(void);
 
 // Testsuite 'Event'
@@ -911,6 +912,7 @@ void QueryBuilder_world_each_filter_1_component(void);
 void QueryBuilder_world_each_filter_2_components(void);
 void QueryBuilder_world_each_filter_1_component_no_entity(void);
 void QueryBuilder_world_each_filter_2_components_no_entity(void);
+void QueryBuilder_world_each_entity(void);
 void QueryBuilder_10_terms(void);
 void QueryBuilder_16_terms(void);
 void QueryBuilder_32_terms(void);
@@ -1037,6 +1039,12 @@ void SystemBuilder_10_terms(void);
 void SystemBuilder_16_terms(void);
 void SystemBuilder_name_arg(void);
 void SystemBuilder_create_w_no_template_args(void);
+void SystemBuilder_deduce_terms_from_each_callback(void);
+void SystemBuilder_deduce_optional_terms_from_each_callback(void);
+void SystemBuilder_deduce_pair_term_from_each_callback(void);
+void SystemBuilder_deduce_singleton_term_from_each_callback(void);
+void SystemBuilder_deduce_singleton_and_component_terms_from_each_callback(void);
+void SystemBuilder_with_terms_after_deduced_terms(void);
 void SystemBuilder_write_annotation(void);
 void SystemBuilder_name_from_root(void);
 
@@ -1411,7 +1419,6 @@ void World_run_post_frame(void);
 void World_component_w_low_id(void);
 void World_get_set_log_level(void);
 void World_reset_world(void);
-void World_reset_set_rest_after_reset(void);
 void World_id_from_pair_type(void);
 void World_scope_w_name(void);
 void World_set_get_context(void);
@@ -4149,6 +4156,10 @@ bake_test_case System_testcases[] = {
         System_register_twice_w_each_run
     },
     {
+        "set_group",
+        System_set_group
+    },
+    {
         "run_w_0_src_query",
         System_run_w_0_src_query
     }
@@ -5161,6 +5172,10 @@ bake_test_case QueryBuilder_testcases[] = {
         QueryBuilder_world_each_filter_2_components_no_entity
     },
     {
+        "world_each_entity",
+        QueryBuilder_world_each_entity
+    },
+    {
         "10_terms",
         QueryBuilder_10_terms
     },
@@ -5658,6 +5673,30 @@ bake_test_case SystemBuilder_testcases[] = {
     {
         "create_w_no_template_args",
         SystemBuilder_create_w_no_template_args
+    },
+    {
+        "deduce_terms_from_each_callback",
+        SystemBuilder_deduce_terms_from_each_callback
+    },
+    {
+        "deduce_optional_terms_from_each_callback",
+        SystemBuilder_deduce_optional_terms_from_each_callback
+    },
+    {
+        "deduce_pair_term_from_each_callback",
+        SystemBuilder_deduce_pair_term_from_each_callback
+    },
+    {
+        "deduce_singleton_term_from_each_callback",
+        SystemBuilder_deduce_singleton_term_from_each_callback
+    },
+    {
+        "deduce_singleton_and_component_terms_from_each_callback",
+        SystemBuilder_deduce_singleton_and_component_terms_from_each_callback
+    },
+    {
+        "with_terms_after_deduced_terms",
+        SystemBuilder_with_terms_after_deduced_terms
     },
     {
         "write_annotation",
@@ -7121,10 +7160,6 @@ bake_test_case World_testcases[] = {
         World_reset_world
     },
     {
-        "reset_rest_after_reset",
-        World_reset_set_rest_after_reset
-    },
-    {
         "id_from_pair_type",
         World_id_from_pair_type
     },
@@ -7958,7 +7993,7 @@ static bake_test_suite suites[] = {
         "System",
         NULL,
         NULL,
-        74,
+        75,
         System_testcases
     },
     {
@@ -7986,7 +8021,7 @@ static bake_test_suite suites[] = {
         "QueryBuilder",
         QueryBuilder_setup,
         NULL,
-        180,
+        181,
         QueryBuilder_testcases,
         1,
         QueryBuilder_params
@@ -7995,7 +8030,7 @@ static bake_test_suite suites[] = {
         "SystemBuilder",
         NULL,
         NULL,
-        22,
+        28,
         SystemBuilder_testcases
     },
     {
