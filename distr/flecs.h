@@ -929,12 +929,21 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ECS_ALIGNOF(T) static_cast<int64_t>(alignof(T))
 #elif defined(ECS_TARGET_MSVC)
 #define ECS_ALIGNOF(T) (int64_t)__alignof(T)
-#elif defined(ECS_TARGET_GNU)
-#define ECS_ALIGNOF(T) (int64_t)__alignof__(T)
-#elif defined(ECS_TARGET_CLANG)
-#define ECS_ALIGNOF(T) (int64_t)__alignof__(T)
 #else
-#define ECS_ALIGNOF(T) ((int64_t)&((struct { char c; T d; } *)0)->d)
+/* Use struct trick since on 32 bit platforms __alignof__ can return different
+ * results than C++'s alignof. This is illustrated when doing:
+ *
+ * __alignof__(uint64_t) == 8 on 32 bit platforms
+ * alignof(uint64_t) == 4 on 32 bit platforms
+ * 
+ * typedef struct {
+ *   uint64_t value;
+ * } Foo;
+ * 
+ * __alignof__(Foo) == 4 on 32 bit platforms
+ * alignof(Foo) == 4 on 32 bit platforms
+ */
+#define ECS_ALIGNOF(T) ((int64_t)(size_t)&((struct { char c; T d; } *)0)->d)
 #endif
 
 #ifndef FLECS_NO_ALWAYS_INLINE
@@ -3674,6 +3683,9 @@ struct ecs_observer_t {
 #define ECS_TYPE_HOOK_MOVE_DTOR_ILLEGAL      ECS_CAST(ecs_flags32_t, 1 << 18)
 #define ECS_TYPE_HOOK_CMP_ILLEGAL            ECS_CAST(ecs_flags32_t, 1 << 19)
 #define ECS_TYPE_HOOK_EQUALS_ILLEGAL         ECS_CAST(ecs_flags32_t, 1 << 20)
+
+/* Internal debug flag that indicates type hooks have been invoked */
+#define ECS_TYPE_HOOK_IN_USE                 ECS_CAST(ecs_flags32_t, 1 << 21)
 
 
 /* All valid hook flags */
@@ -26453,7 +26465,7 @@ struct entity_view : public id {
     First* try_get_mut(Second constant) const {
         const auto& et = enum_type<Second>(this->world_);
         flecs::entity_t target = et.entity(constant);
-        return get_mut<First>(target);
+        return try_get_mut<First>(target);
     }
 
     /** Get mutable component value (untyped).
@@ -26514,7 +26526,7 @@ struct entity_view : public id {
      */
     template<typename First, typename Second>
     Second* try_get_mut_second() const {
-        return get_mut<pair_object<First, Second>>();
+        return try_get_mut<pair_object<First, Second>>();
     }
 
 
@@ -26651,7 +26663,7 @@ struct entity_view : public id {
      * @tparam Second the second element of a pair.
      */
     template<typename First, typename Second>
-    Second* get_mut_second() const {
+    Second& get_mut_second() const {
         Second *r = try_get_mut_second<First, Second>();
         ecs_assert(r != nullptr, ECS_INVALID_OPERATION, 
             "invalid get_mut: entity does not have component (use try_get_mut)");
@@ -31204,7 +31216,7 @@ struct table {
     /** Find type index for (component) id.
      *
      * @param id The (component) id.
-     * @return The index of the id in the table type, -1 if not found/
+     * @return The index of the id in the table type, -1 if not found.
      */
     int32_t type_index(flecs::id_t id) const {
         return ecs_table_get_type_index(world_, table_, id);
@@ -31213,7 +31225,7 @@ struct table {
     /** Find type index for type.
      *
      * @tparam T The type.
-     * @return True if the table has the type, false if not.
+     * @return The index of the id in the table type, -1 if not found.
      */
     template <typename T>
     int32_t type_index() const {
@@ -31223,7 +31235,7 @@ struct table {
     /** Find type index for pair.
      * @param first First element of pair.
      * @param second Second element of pair.
-     * @return True if the table has the pair, false if not.
+     * @return The index of the id in the table type, -1 if not found.
      */
     int32_t type_index(flecs::entity_t first, flecs::entity_t second) const {
         return type_index(ecs_pair(first, second));
@@ -31232,7 +31244,7 @@ struct table {
     /** Find type index for pair.
      * @tparam First First element of pair.
      * @param second Second element of pair.
-     * @return True if the table has the pair, false if not.
+     * @return The index of the id in the table type, -1 if not found.
      */
     template <typename First>
     int32_t type_index(flecs::entity_t second) const {
@@ -31242,7 +31254,7 @@ struct table {
     /** Find type index for pair.
      * @tparam First First element of pair.
      * @tparam Second Second element of pair.
-     * @return True if the table has the pair, false if not.
+     * @return The index of the id in the table type, -1 if not found.
      */
     template <typename First, typename Second>
     int32_t type_index() const {
@@ -31261,7 +31273,7 @@ struct table {
     /** Find column index for type.
      *
      * @tparam T The type.
-     * @return True if the table has the type, false if not.
+     * @return The column index of the id in the table type, -1 if not found.
      */
     template <typename T>
     int32_t column_index() const {
@@ -31271,7 +31283,7 @@ struct table {
     /** Find column index for pair.
      * @param first First element of pair.
      * @param second Second element of pair.
-     * @return True if the table has the pair, false if not.
+     * @return The column index of the id in the table type, -1 if not found.
      */
     int32_t column_index(flecs::entity_t first, flecs::entity_t second) const {
         return column_index(ecs_pair(first, second));
@@ -31280,7 +31292,7 @@ struct table {
     /** Find column index for pair.
      * @tparam First First element of pair.
      * @param second Second element of pair.
-     * @return True if the table has the pair, false if not.
+     * @return The column index of the id in the table type, -1 if not found.
      */
     template <typename First>
     int32_t column_index(flecs::entity_t second) const {
@@ -31290,7 +31302,7 @@ struct table {
     /** Find column index for pair.
      * @tparam First First element of pair.
      * @tparam Second Second element of pair.
-     * @return True if the table has the pair, false if not.
+     * @return The column index of the id in the table type, -1 if not found.
      */
     template <typename First, typename Second>
     int32_t column_index() const {
@@ -32748,12 +32760,12 @@ struct term_builder_i : term_ref_builder_i<Base> {
         return this->oper(flecs::Or);
     }
 
-    /* Short for oper(flecs::Or) */
+    /* Short for oper(flecs::Not) */
     Base& not_() {
         return this->oper(flecs::Not);
     }
 
-    /* Short for oper(flecs::Or) */
+    /* Short for oper(flecs::Optional) */
     Base& optional() {
         return this->oper(flecs::Optional);
     }
@@ -35951,7 +35963,7 @@ public:
         flecs::entity_t id = _::type<T>::id(world_v());
         flecs::entity_t mid = ecs_lookup_path_w_sep(
             world_v(), id, m, "::", "::", false);
-        ecs_assert(m != 0, ECS_INVALID_PARAMETER, NULL);
+        ecs_assert(mid != 0, ECS_INVALID_PARAMETER, NULL);
         desc_->var = v;
         return this->member(mid);
     }

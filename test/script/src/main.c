@@ -457,6 +457,7 @@ void Eval_scientific_notation_negative_exponent(void);
 void Eval_scientific_notation_positive_exponent_sign(void);
 void Eval_const_var_w_new_expr_two_tags(void);
 void Eval_const_var_w_new_expr_tag_component(void);
+void Eval_empty_entity_kind(void);
 
 // Testsuite 'Template'
 void Template_template_no_scope(void);
@@ -1338,6 +1339,31 @@ void Fuzzing_118(void);
 void Fuzzing_119(void);
 void Fuzzing_120(void);
 void Fuzzing_121(void);
+void Fuzzing_122(void);
+void Fuzzing_123(void);
+void Fuzzing_124(void);
+void Fuzzing_125(void);
+void Fuzzing_126(void);
+void Fuzzing_127(void);
+void Fuzzing_128(void);
+void Fuzzing_129(void);
+void Fuzzing_130(void);
+void Fuzzing_131(void);
+void Fuzzing_132(void);
+void Fuzzing_133(void);
+void Fuzzing_134(void);
+void Fuzzing_135(void);
+void Fuzzing_136(void);
+void Fuzzing_137(void);
+void Fuzzing_138(void);
+void Fuzzing_140(void);
+void Fuzzing_141(void);
+void Fuzzing_144(void);
+void Fuzzing_145(void);
+void Fuzzing_146(void);
+void Fuzzing_147(void);
+void Fuzzing_149(void);
+void Fuzzing_150(void);
 
 bake_test_case Eval_testcases[] = {
     {
@@ -3131,6 +3157,10 @@ bake_test_case Eval_testcases[] = {
     {
         "const_var_w_new_expr_tag_component",
         Eval_const_var_w_new_expr_tag_component
+    },
+    {
+        "empty_entity_kind",
+        Eval_empty_entity_kind
     }
 };
 
@@ -6607,6 +6637,106 @@ bake_test_case Fuzzing_testcases[] = {
     {
         "121",
         Fuzzing_121
+    },
+    {
+        "122",
+        Fuzzing_122
+    },
+    {
+        "123",
+        Fuzzing_123
+    },
+    {
+        "124",
+        Fuzzing_124
+    },
+    {
+        "125",
+        Fuzzing_125
+    },
+    {
+        "126",
+        Fuzzing_126
+    },
+    {
+        "127",
+        Fuzzing_127
+    },
+    {
+        "128",
+        Fuzzing_128
+    },
+    {
+        "129",
+        Fuzzing_129
+    },
+    {
+        "130",
+        Fuzzing_130
+    },
+    {
+        "131",
+        Fuzzing_131
+    },
+    {
+        "132",
+        Fuzzing_132
+    },
+    {
+        "133",
+        Fuzzing_133
+    },
+    {
+        "134",
+        Fuzzing_134
+    },
+    {
+        "135",
+        Fuzzing_135
+    },
+    {
+        "136",
+        Fuzzing_136
+    },
+    {
+        "137",
+        Fuzzing_137
+    },
+    {
+        "138",
+        Fuzzing_138
+    },
+    {
+        "140",
+        Fuzzing_140
+    },
+    {
+        "141",
+        Fuzzing_141
+    },
+    {
+        "144",
+        Fuzzing_144
+    },
+    {
+        "145",
+        Fuzzing_145
+    },
+    {
+        "146",
+        Fuzzing_146
+    },
+    {
+        "147",
+        Fuzzing_147
+    },
+    {
+        "149",
+        Fuzzing_149
+    },
+    {
+        "150",
+        Fuzzing_150
     }
 };
 
@@ -6614,6 +6744,7 @@ const char* Expr_folding_param[] = {"enabled", "disabled"};
 bake_test_param Expr_params[] = {
     {"folding", (char**)Expr_folding_param, 2}
 };
+
 const char* Deserialize_folding_param[] = {"enabled", "disabled"};
 bake_test_param Deserialize_params[] = {
     {"folding", (char**)Deserialize_folding_param, 2}
@@ -6624,7 +6755,7 @@ static bake_test_suite suites[] = {
         "Eval",
         NULL,
         NULL,
-        448,
+        449,
         Eval_testcases
     },
     {
@@ -6684,7 +6815,7 @@ static bake_test_suite suites[] = {
         "Fuzzing",
         NULL,
         NULL,
-        121,
+        146,
         Fuzzing_testcases
     }
 };

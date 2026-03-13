@@ -393,7 +393,7 @@ void flecs_component_record_check_constraints(
             /* Can't use relationship as target */
             if (ecs_has_id(world, tgt, EcsRelationship)) {
                 if (!ecs_id_is_wildcard(rel) && 
-                    !ecs_has_id(world, rel, EcsTrait)) 
+                    !ecs_has_id(world, rel, EcsTrait))
                 {
                     ecs_throw(ECS_CONSTRAINT_VIOLATED, "cannot use '%s' as target"
                         " in pair '%s': '%s' has the Relationship trait",
@@ -1196,6 +1196,8 @@ void flecs_component_update_childof_w_depth(
     ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_pair_record_t *pair = cr->pair;
     ecs_assert(pair != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(depth < (FLECS_DAG_DEPTH_MAX + 1), ECS_INVALID_OPERATION, 
+        "possible cycle detected in ChildOf/Parent hierarchy");
 
     if (cr->flags & EcsIdMarkedForDelete) {
         return;

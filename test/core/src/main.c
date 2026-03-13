@@ -708,6 +708,12 @@ void Sparse_check_regular_target_in_sparse_observer(void);
 void Sparse_check_regular_exclusive_target_in_sparse_observer(void);
 void Sparse_child_of_component_w_sparse(void);
 void Sparse_child_of_component_w_sparse_exclusive(void);
+void Sparse_create_entity_in_on_remove(void);
+void Sparse_defer_add_two_sparse_w_observer(void);
+void Sparse_defer_remove_two_sparse_w_observer(void);
+void Sparse_defer_set_batch_two_sparse_w_observer(void);
+void Sparse_defer_set_w_sparse_w_observer(void);
+void Sparse_defer_ensure_modified_w_sparse_w_observer(void);
 
 // Testsuite 'NonFragmentingChildOf'
 void NonFragmentingChildOf_set_parent_no_ordered_children(void);
@@ -1172,6 +1178,7 @@ void Reference_get_ref_after_delete(void);
 void Reference_get_ref_after_delete_other(void);
 void Reference_get_ref_after_delete_child(void);
 void Reference_get_ref_after_clear(void);
+void Reference_get_ref_after_clear_table(void);
 void Reference_get_ref_after_clear_other(void);
 void Reference_get_ref_after_realloc(void);
 void Reference_get_ref_after_realloc_w_lifecycle(void);
@@ -1467,6 +1474,7 @@ void Lookup_lookup_name_65_chars(void);
 void Lookup_lookup_path_63_chars(void);
 void Lookup_lookup_path_64_chars(void);
 void Lookup_lookup_path_65_chars(void);
+void Lookup_lookup_malformed(void);
 
 // Testsuite 'Singleton'
 void Singleton_add_singleton(void);
@@ -1500,6 +1508,10 @@ void Clone_tag_w_value(void);
 void Clone_1_tag_1_component(void);
 void Clone_1_tag_1_component_w_value(void);
 void Clone_clone_w_name(void);
+void Clone_clone_component(void);
+void Clone_clone_component_w_value(void);
+void Clone_clone_component_w_entity(void);
+void Clone_clone_component_w_entity_w_value(void);
 
 // Testsuite 'ComponentLifecycle'
 void ComponentLifecycle_setup(void);
@@ -1778,6 +1790,7 @@ void Pairs_value_pair_to_str(void);
 void Pairs_has_value_pair_wildcard(void);
 void Pairs_has_value_pair_any(void);
 void Pairs_target_w_value_pair(void);
+void Pairs_inherit_relationship_trait(void);
 
 // Testsuite 'Trigger'
 void Trigger_on_add_trigger_before_table(void);
@@ -5955,6 +5968,30 @@ bake_test_case Sparse_testcases[] = {
     {
         "child_of_component_w_sparse_exclusive",
         Sparse_child_of_component_w_sparse_exclusive
+    },
+    {
+        "create_entity_in_on_remove",
+        Sparse_create_entity_in_on_remove
+    },
+    {
+        "defer_add_two_sparse_w_observer",
+        Sparse_defer_add_two_sparse_w_observer
+    },
+    {
+        "defer_remove_two_sparse_w_observer",
+        Sparse_defer_remove_two_sparse_w_observer
+    },
+    {
+        "defer_set_batch_two_sparse_w_observer",
+        Sparse_defer_set_batch_two_sparse_w_observer
+    },
+    {
+        "defer_set_w_sparse_w_observer",
+        Sparse_defer_set_w_sparse_w_observer
+    },
+    {
+        "defer_ensure_modified_w_sparse_w_observer",
+        Sparse_defer_ensure_modified_w_sparse_w_observer
     }
 };
 
@@ -7766,6 +7803,10 @@ bake_test_case Reference_testcases[] = {
         Reference_get_ref_after_clear
     },
     {
+        "get_ref_after_clear_table",
+        Reference_get_ref_after_clear_table
+    },
+    {
         "get_ref_after_clear_other",
         Reference_get_ref_after_clear_other
     },
@@ -8911,6 +8952,10 @@ bake_test_case Lookup_testcases[] = {
     {
         "lookup_path_65_chars",
         Lookup_lookup_path_65_chars
+    },
+    {
+        "lookup_malformed",
+        Lookup_lookup_malformed
     }
 };
 
@@ -9033,6 +9078,22 @@ bake_test_case Clone_testcases[] = {
     {
         "clone_w_name",
         Clone_clone_w_name
+    },
+    {
+        "clone_component",
+        Clone_clone_component
+    },
+    {
+        "clone_component_w_value",
+        Clone_clone_component_w_value
+    },
+    {
+        "clone_component_w_entity",
+        Clone_clone_component_w_entity
+    },
+    {
+        "clone_component_w_entity_w_value",
+        Clone_clone_component_w_entity_w_value
     }
 };
 
@@ -10131,6 +10192,10 @@ bake_test_case Pairs_testcases[] = {
     {
         "target_w_value_pair",
         Pairs_target_w_value_pair
+    },
+    {
+        "inherit_relationship_trait",
+        Pairs_inherit_relationship_trait
     }
 };
 
@@ -15861,7 +15926,7 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        218,
+        224,
         Sparse_testcases,
         1,
         Sparse_params
@@ -15912,7 +15977,7 @@ static bake_test_suite suites[] = {
         "Reference",
         Reference_setup,
         NULL,
-        25,
+        26,
         Reference_testcases
     },
     {
@@ -15947,7 +16012,7 @@ static bake_test_suite suites[] = {
         "Lookup",
         Lookup_setup,
         NULL,
-        63,
+        64,
         Lookup_testcases
     },
     {
@@ -15961,7 +16026,7 @@ static bake_test_suite suites[] = {
         "Clone",
         NULL,
         NULL,
-        16,
+        20,
         Clone_testcases
     },
     {
@@ -15975,7 +16040,7 @@ static bake_test_suite suites[] = {
         "Pairs",
         NULL,
         NULL,
-        135,
+        136,
         Pairs_testcases
     },
     {

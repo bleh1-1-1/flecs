@@ -1222,6 +1222,8 @@ void flecs_table_fini_data(
     table->data.count = 0;
     table->_->traversable_count = 0;
     table->flags &= ~EcsTableHasTraversable;
+
+    flecs_increment_table_version(world, table);
 }
 
 const ecs_entity_t* ecs_table_entities(
@@ -1660,9 +1662,6 @@ int32_t flecs_table_grow_data(
     /* If the table is monitored indicate that there has been a change */
     flecs_table_mark_table_dirty(world, table, 0);
 
-    /* Mark columns as potentially reallocated */
-    flecs_increment_table_column_version(world, table);
-
     /* Return index of first added entity */
     return count;
 }
@@ -1714,7 +1713,6 @@ void flecs_table_append(
  
     /* If the table is monitored indicate that there has been a change */
     flecs_table_mark_table_dirty(world, table, 0);
-    flecs_increment_table_column_version(world, table);
     ecs_assert(count >= 0, ECS_INTERNAL_ERROR, NULL);
 
     /* Fast path: no switch columns, no lifecycle actions */
@@ -2109,8 +2107,6 @@ bool flecs_table_shrink(
 
     table->data.size = count;
 
-    flecs_increment_table_column_version(world, table);
-
     flecs_table_mark_table_dirty(world, table, 0);
 
     flecs_table_check_sanity(table);
@@ -2386,9 +2382,6 @@ void flecs_table_merge_data(
 
     /* Mark entity column as dirty */
     flecs_table_mark_table_dirty(world, dst_table, 0);
-
-    /* Mark columns as potentially reallocated */
-    flecs_increment_table_column_version(world, dst_table);
 
     dst_table->data.entities = dst_entities.array;
     dst_table->data.count = dst_entities.count;

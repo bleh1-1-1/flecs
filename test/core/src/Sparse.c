@@ -7192,3 +7192,269 @@ void Sparse_child_of_component_w_sparse_exclusive(void) {
 
     ecs_fini(world);
 }
+
+static void OnRemoveCreateEntity(ecs_iter_t *it)
+{
+    ecs_entity_t recycled = ecs_new(it->world);
+    (void)recycled;
+}
+
+void Sparse_create_entity_in_on_remove(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t R = ecs_entity(world, { .name = "R" });
+    if (!fragment) ecs_add_id(world, R, EcsDontFragment);
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = ecs_pair(R, EcsWildcard) }},
+        .events = { EcsOnRemove },
+        .callback = OnRemoveCreateEntity
+    });
+
+    ecs_entity_t parent = ecs_new(world);
+    ecs_entity_t target = ecs_new(world);
+    ecs_add_pair(world, target, EcsChildOf, parent);
+
+    ecs_entity_t subject = ecs_new(world);
+    ecs_add_pair(world, subject, EcsChildOf, parent);
+    ecs_add_pair(world, subject, R, target);
+
+    ecs_delete(world, parent);
+
+    test_assert(!ecs_is_alive(world, parent));
+    test_assert(!ecs_is_alive(world, subject));
+    test_assert(!ecs_is_alive(world, target));
+
+    ecs_fini(world);
+}
+
+static int OnAddTagA_invoked = 0;
+static int OnAddTagB_invoked = 0;
+static int OnRemoveTagA_invoked = 0;
+static int OnRemoveTagB_invoked = 0;
+static int DataOnSet_invoked = 0;
+static int DataOnAdd_invoked = 0;
+static int RegularOnAdd_invoked = 0;
+static int DataOnSet_value = -1;
+
+static void OnAddTagA(ecs_iter_t *it) {
+    OnAddTagA_invoked += it->count;
+}
+
+static void OnAddTagB(ecs_iter_t *it) {
+    OnAddTagB_invoked += it->count;
+}
+
+static void OnRemoveTagA(ecs_iter_t *it) {
+    OnRemoveTagA_invoked += it->count;
+}
+
+static void OnRemoveTagB(ecs_iter_t *it) {
+    OnRemoveTagB_invoked += it->count;
+}
+
+static void DataOnAdd(ecs_iter_t* it)
+{
+    DataOnAdd_invoked++;
+}
+
+static void DataOnSet(ecs_iter_t* it)
+{
+    DataOnSet_invoked++;
+    Velocity* d = ecs_field_at(it, Velocity, 0, 0);
+    if (d) {
+        DataOnSet_value = d->x;
+    }
+}
+
+static void RegularOnAdd(ecs_iter_t* it)
+{
+    RegularOnAdd_invoked++;
+}
+
+void Sparse_defer_add_two_sparse_w_observer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t DontFragA = ecs_entity(world, { .name = "DontFragA" });
+    if (!fragment) ecs_add_id(world, DontFragA, EcsDontFragment);
+
+    ecs_entity_t DontFragB = ecs_entity(world, { .name = "DontFragB" });
+    if (!fragment) ecs_add_id(world, DontFragB, EcsDontFragment);
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = DontFragA }},
+        .events = { EcsOnAdd },
+        .callback = OnAddTagA
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = DontFragB }},
+        .events = { EcsOnAdd },
+        .callback = OnAddTagB
+    });
+
+    OnAddTagA_invoked = 0;
+    OnAddTagB_invoked = 0;
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+    ecs_add_id(world, e, DontFragA);
+    ecs_add_id(world, e, DontFragB);
+    ecs_defer_end(world);
+
+    test_int(OnAddTagA_invoked, 1);
+    test_int(OnAddTagB_invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_remove_two_sparse_w_observer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t DontFragA = ecs_entity(world, { .name = "DontFragA" });
+    if (!fragment) ecs_add_id(world, DontFragA, EcsDontFragment);
+
+    ecs_entity_t DontFragB = ecs_entity(world, { .name = "DontFragB" });
+    if (!fragment) ecs_add_id(world, DontFragB, EcsDontFragment);
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = DontFragA }},
+        .events = { EcsOnRemove },
+        .callback = OnRemoveTagA
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = DontFragB }},
+        .events = { EcsOnRemove },
+        .callback = OnRemoveTagB
+    });
+
+    OnRemoveTagA_invoked = 0;
+    OnRemoveTagB_invoked = 0;
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_id(world, e, DontFragA);
+    ecs_add_id(world, e, DontFragB);
+
+    ecs_defer_begin(world);
+    ecs_remove_id(world, e, DontFragA);
+    ecs_remove_id(world, e, DontFragB);
+    ecs_defer_end(world);
+
+    test_int(OnRemoveTagA_invoked, 1);
+    test_int(OnRemoveTagB_invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_set_batch_two_sparse_w_observer(void) {
+    ecs_world_t* world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_add_id(world, ecs_id(Velocity), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Velocity), EcsDontFragment);
+
+    ecs_observer(world, {
+        .query.terms = {{.id = ecs_id(Position) }},
+        .events = { EcsOnAdd },
+        .callback = RegularOnAdd
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{.id = ecs_id(Velocity) }},
+        .events = { EcsOnAdd },
+        .callback = DataOnAdd
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{.id = ecs_id(Velocity) }},
+        .events = { EcsOnSet },
+        .callback = DataOnSet
+    });
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+        ecs_set(world, e, Position, {42});
+        ecs_set(world, e, Velocity, {99});
+    ecs_defer_end(world);
+
+    test_int(RegularOnAdd_invoked, 1);
+    test_int(DataOnAdd_invoked, 1);
+    test_int(DataOnSet_invoked, 1);
+    test_int(DataOnSet_value, 99);
+    test_assert(ecs_has(world, e, Velocity));
+    test_assert(ecs_get(world, e, Velocity)->x == 99);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_set_w_sparse_w_observer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Velocity);
+    ecs_add_id(world, ecs_id(Velocity), EcsSparse);
+    if (!fragment) ecs_add_id(world, ecs_id(Velocity), EcsDontFragment);
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = ecs_id(Velocity) }},
+        .events = { EcsOnAdd },
+        .callback = DataOnAdd
+    });
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = ecs_id(Velocity) }},
+        .events = { EcsOnSet },
+        .callback = DataOnSet
+    });
+
+    ecs_entity_t e = ecs_new(world);
+
+    ecs_defer_begin(world);
+        ecs_set(world, e, Velocity, {77});
+    ecs_defer_end(world);
+
+    test_int(DataOnAdd_invoked, 1);
+    test_int(DataOnSet_invoked, 1);
+    test_int(DataOnSet_value, 77);
+    test_assert(ecs_has(world, e, Velocity));
+    test_assert(ecs_get(world, e, Velocity)->x == 77);
+
+    ecs_fini(world);
+}
+
+void Sparse_defer_ensure_modified_w_sparse_w_observer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ecs_add_id(world, ecs_id(Position), EcsSparse);
+    ecs_add_id(world, ecs_id(Position), EcsDontFragment);
+
+    ecs_observer(world, {
+        .query.terms = {{ .id = ecs_id(Position) }},
+        .events = { EcsOnSet },
+        .callback = DataOnSet
+    });
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_set(world, e, Position, { 42 });
+
+    test_int(DataOnSet_invoked, 1);
+
+    DataOnSet_invoked = 0;
+
+    ecs_defer_begin(world);
+    Position *ptr = ecs_ensure(world, e, Position);
+    ptr->x = 77;
+    ecs_modified(world, e, Position);
+    ecs_defer_end(world);
+
+    test_int(DataOnSet_invoked, 1);
+    test_int(DataOnSet_value, 77);
+
+    ecs_fini(world);
+}
+

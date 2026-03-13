@@ -7,7 +7,6 @@ void fuzz(const char *expr) {
 #ifdef FLECS_SCRIPT_MATH
     ECS_IMPORT(world, FlecsScriptMath);
 #endif
-
     ecs_log_set_level(-5);
     ecs_script_run(world, "test", expr, NULL);
     test_assert(true);
@@ -489,6 +488,8 @@ void Fuzzing_17(void) {
     LINE ""
         ;
 
+    install_test_abort();
+    test_expect_abort();
     fuzz(expr);
 }
 
@@ -651,6 +652,8 @@ void Fuzzing_20(void) {
     LINE ""
         ;
 
+    install_test_abort();
+    test_expect_abort();
     fuzz(expr);
 }
 
@@ -2140,6 +2143,8 @@ void Fuzzing_47(void) {
     LINE ""
         ;
 
+    install_test_abort();
+    test_expect_abort();
     fuzz(expr);
 }
 
@@ -7364,7 +7369,1483 @@ void Fuzzing_121(void) {
     LINE "\377  \025f888Z88888888\27088g!-1-8888((((((>((8%88S88lecs.8,\" "
         ;
 
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000000,sig:11,src:003045,time:2867320,execs:480865,op:havoc,rep:2, sha1=ad9000b2e4ea00cd8ed806d7f392fc7f283f6501, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x0001023da0d4 in flecs_emit_forward flecs/src/observable.c:1035:53
+ *     #1 0x0001023da0d4 in flecs_emit flecs/src/observable.c:1437:13
+ *     #2 0x0001024576bc in flecs_table_emit flecs/src/storage/table.c:526:5
+ *     #3 0x0001024576bc in flecs_table_fini flecs/src/storage/table.c:1291:13
+ *     #4 0x00010244291c in flecs_component_release_tables flecs/src/storage/component_index.c:862:13
+ *     #5 0x0001023e7210 in flecs_on_delete_clear_ids flecs/src/on_delete.c:636:17
+ *     #6 0x0001023e7210 in flecs_on_delete flecs/src/on_delete.c:713:9
+ *     #7 0x0001023e79a8 in ecs_delete_with flecs/src/on_delete.c:743:5
+ *     #8 0x00010233ccd4 in ecs_script_clear flecs/src/addons/script/script.c:86:9
+ *     #9 0x00010233d698 in ecs_script_update flecs/src/addons/script/script.c:239:5
+ *     #10 0x000102250adc in fuzz_script_update fuzz/flecs_script_harness.c:151:5
+ *     #11 0x000102250adc in main fuzz/flecs_script_harness.c:179:9
+ */
+void Fuzzing_122(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Station {}"
+    LINE "Faction {}"
+    LINE "Rel {}"
+    LINE "Tgt {  "
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  }"
+    LINE ""
+    LINE "struct Shader {"
+    LINE "  filename = string"
+    LINE "  code = string"
+    LINE "}"
+    LINE ""
+    LINE "enum Team {"
+    LINE "  Red,"
+    LINE "  Blue"
+    LINE "}"
+    LINE ""
+    LINE "const orbit_radius: 32.5"
+    LINE ""
+    LINE "Earth { Planet }"
+    LINE "Mars { Planet }"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "    Orbit: {radius: $orbit_radius, phase: $phase}"
+    LINE "    Team: {Blue}"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree Parent"
+    LINE "parent_root {"
+    LINE "  Nameplate: {\"parent sto\177age root\"}"
+    LINE ""
+    LINE "  fleet_alpha {"
+    LINE "    (Faction, Earth)"
+    LINE "    Team: {Red}"
+    LINE "    Outpost: {phase: 0.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf"
+    LINE "childof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost: {phase: 1.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  dock_b {"
+    LINE "    @tree Parent"
+    LINE "    parent_section {"
+    LINE "      nested_parent_a {}"
+    LINE "      nested_parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE ""
+    LINE "mixed_root {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Station): {"
+    LINE "  filename: \"station.glsl\","
+    LINE "      code: `"
+    LINE "        void main() \\{"
+    LINE "          gl_Position = vec4(0.0);"
+    LINE "        }`"
+    LINE "      }"
+    LINE "  } {"
+    LINE "    (Rel, Tgt) {"
+    LINE "      relay {"
+    LINE "        @tree ChildOf"
+    LINE "        links {"
+    LINE "          link_a {}"
+    LINE "          link_b {}"
+    LINE "        }"
+    LINE "}"
+    LINE "    }"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000001,sig:11,src:004801,time:5016725,execs:784772,op:havoc,rep:2, sha1=0eb4613a9b55350939bfa4bedd4dec04549dab38, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x000100774e58 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1118
+ *     #1 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #2 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #3 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #4 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #5 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #6 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #7 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #8 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #9 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #10 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ *     #11 0x000100775248 in flecs_entities_update_childof_depth flecs/src/storage/component_index.c:1167:13
+ */
+void Fuzzing_123(void) {
+    install_test_abort();
+    const char *expr =
+    HEAD "dd,#1111110,#1111111d,#111111#1111111mpkat5 OJ"
+        ;
+
+    test_expect_abort();
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000002,sig:11,src:004801,time:5016885,execs:784805,op:havoc,rep:1, sha1=7c67b638b0ecf65d81c72e7c629bc8de211b1099, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x00010417e678 in flecs_tokenizer_identifier flecs/src/addons/parser/tokenizer.c:405:18
+ *     #1 0x00010420db40 in flecs_script_comma_expr flecs/src/addons/script/parser.c:80:5
+ *     #2 0x000104209108 in flecs_script_stmt flecs/src/addons/script/parser.c:464:5
+ *     #3 0x00010420efc4 in ecs_script_parse flecs/src/addons/script/parser.c:1063:15
+ *     #4 0x000104210e08 in ecs_script_run flecs/src/addons/script/script.c:130:28
+ *     #5 0x000104124a54 in fuzz_script_run fuzz/flecs_script_harness.c:107:5
+ *     #6 0x000104124a54 in main fuzz/flecs_script_harness.c:178:9
+ *     #7 0x00018302eb94  (<unknown module>)
+ */
+void Fuzzing_124(void) {
+    install_test_abort();
+    const char *expr =
+    HEAD "dd,#1111110,#1111111d,#111111#1111111mpkat5 O\\"
+        ;
+
+    test_expect_abort();
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000003,sig:11,src:004801,time:5029682,execs:787426,op:havoc,rep:2, sha1=f9bfc814a82825b736503d45c7fd9153206f53a4, grouped_crashes=1
+ * asan_stack:
+ *     #0 0x000100d12678 in flecs_tokenizer_identifier flecs/src/addons/parser/tokenizer.c:405:18
+ *     #1 0x000100d98d24 in flecs_script_stmt flecs/src/addons/script/parser.c:460:5
+ *     #2 0x000100da2fc4 in ecs_script_parse flecs/src/addons/script/parser.c:1063:15
+ *     #3 0x000100da4e08 in ecs_script_run flecs/src/addons/script/script.c:130:28
+ *     #4 0x000100cb8a54 in fuzz_script_run fuzz/flecs_script_harness.c:107:5
+ *     #5 0x000100cb8a54 in main fuzz/flecs_script_harness.c:178:9
+ *     #6 0x00018302eb94  (<unknown module>)
+ */
+void Fuzzing_125(void) {
+    install_test_abort();
+    const char *expr =
+    HEAD "dd,#1111111,#1111112d,#111111#1111111m#1111112d,#111111#1111111mpkat5 pkat5 O\\"
+        ;
+
+    test_expect_abort();
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer02/crashes/id:000000,sig:11,src:002790,time:2240821,execs:380309,op:havoc,rep:1, sha1=67ab091fe7d55d3e6f2687c9c11b3dcc7aed9795, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x000104fb8884 in flecs_expr_binary_visit_type flecs/src/addons/script/expr/visit_type.c:1106:22
+ *     #1 0x000104fb67fc in flecs_expr_visit_type_priv flecs/src/addons/script/expr/visit_type.c:2216:13
+ *     #2 0x000104fb8170 in flecs_expr_initializer_visit_type flecs/src/addons/script/expr/visit_type.c:994:13
+ *     #3 0x000104fb6570 in flecs_expr_visit_type_priv flecs/src/addons/script/expr/visit_type.c:2202:13
+ *     #4 0x000104fb5774 in flecs_expr_visit_type flecs/src/addons/script/expr/visit_type.c:2329:16
+ *     #5 0x000104fe6f98 in flecs_script_eval_expr flecs/src/addons/script/visit_eval.c:546:13
+ *     #6 0x000104feac18 in flecs_script_eval_component flecs/src/addons/script/visit_eval.c:1006:13
+ *     #7 0x000104feac18 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1660:16
+ *     #8 0x000104fe2a74 in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #9 0x000104fe735c in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #10 0x000104fe8a84 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1654:16
+ *     #11 0x000104fe2e1c in ecs_script_visit_node_ flecs/src/addons/script/visit.c:151:9
+ */
+void Fuzzing_126(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "struct Position {"
+    LINE "  x = f32"
+    LINE "  y = f32"
+    LINE "}"
+    LINE ""
+    LINE "PositionArray {"
+    LINE "  array: {type: Position, count: 3}"
+    LINE "}"
+    LINE ""
+    LINE "PositionVector {"
+    LINE "  vector: {type: Position}"
+    LINE "}"
+    LINE ""
+    LINE "NameVector {"
+    LINE "  vector: {type: string}"
+    LINE "}"
+    LINE ""
+    LINE "FlagVector {"
+    LINE "  vector: {type: bool}"
+    LINE "}"
+    LINE ""
+    LINE "route {"
+    LINE "  PositionArray: ["
+    LINE "{x: 0, y: 0},"
+    LINE "    {x: 10, y: 5}, {x: 20, y: 10}"
+    LINE "  ]"
+    LINE ""
+    LINE "  PositionVector: []NameVector: [\"alpha\"< \"\\e\232a\", \"g\"]"
+    LINE "  FlagVector: [true, false, true, true]"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer04/crashes/id:000000,sig:11,src:003575,time:4075077,execs:696504,op:havoc,rep:2, sha1=0a13357ae2d7bcf5ab51a6b353da627460eb291a, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x000104dee0d4 in flecs_emit_forward flecs/src/observable.c:1035:53
+ *     #1 0x000104dee0d4 in flecs_emit flecs/src/observable.c:1437:13
+ *     #2 0x000104e6b6bc in flecs_table_emit flecs/src/storage/table.c:526:5
+ *     #3 0x000104e6b6bc in flecs_table_fini flecs/src/storage/table.c:1291:13
+ *     #4 0x000104e5691c in flecs_component_release_tables flecs/src/storage/component_index.c:862:13
+ *     #5 0x000104dfb210 in flecs_on_delete_clear_ids flecs/src/on_delete.c:636:17
+ *     #6 0x000104dfb210 in flecs_on_delete flecs/src/on_delete.c:713:9
+ *     #7 0x000104dfb9a8 in ecs_delete_with flecs/src/on_delete.c:743:5
+ *     #8 0x000104d51820 in ecs_script_update flecs/src/addons/script/script.c:254:9
+ *     #9 0x000104c64ac8 in fuzz_script_update fuzz/flecs_script_harness.c:150:5
+ *     #10 0x000104c64ac8 in main fuzz/flecs_script_harness.c:179:9
+ *     #11 0x00018302eb94  (<unknown module>)
+ */
+void Fuzzing_127(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Statiofleet_alpha {"
+    LINE "   (Rel, Tgt) {"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  radius = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "struct Shader {"
+    LINE "  filename = string"
+    LINE "  code = string"
+    LINE "}"
+    LINE ""
+    LINE "enum Team {"
+    LINE "  Red,"
+    LINE "  Blue"
+    LINE "}"
+    LINE ""
+    LINE "const orbit_radius: 32.5"
+    LINE ""
+    LINE "Earth { Planet }"
+    LINE "Mars { Planet }"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "    Orbit: {radius: $orbit_radius, phase: $phase}"
+    LINE "Team: {Blue}"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree Parent"
+    LINE "parroot {"
+    LINE "  Nameplate: {\"parent storage root\"}"
+    LINE ""
+    LINE "  n {}"
+    LINE "Faction {    (Faction, Earth)"
+    LINE "    Team: {Red}"
+    LINE "    Outpost: {phase: 0.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf"
+    LINE "childof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost: {phase: 1.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  dock_b {"
+    LINE "    @tree Parent"
+    LINE "    parent_section {"
+    LINE "      nested_parent_a _v: dot($a, $b)"
+    LINE "parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "mixed_root {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Station): {"
+    LINE "  filename: \"station.glsl\","
+    LINE "  code: `"
+    LINE "    \007   void main() \\using fmecs.gl_Position = vec4(0.0);"
+    LINE "        }`   }"
+    LINE "  }"
+    LINE ""
+    LINE "  @tree Pa"
+    LINE "  parent_zone {"
+    LINE " }"
+    LINE "Rel {}"
+    LINE "Tgt {}"
+    LINE "      relay {"
+    LINE "        @tree Chf"
+    LINE "        links {"
+    LINE "          link_a {}"
+    LINE "          link_b {}"
+    LINE "        }"
+    LINE "      }"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer05/crashes/id:000000,sig:11,src:004546,time:4379169,execs:755989,op:havoc,rep:2, sha1=a82a5f88639f425e681d94fb603cfb1fc84a47ea, grouped_crashes=1
+ * asan_stack:
+ *     #0 0x0001009965ac in ecs_vec_get flecs/src/datastructures/vec.c:490
+ *     #1 0x000100885388 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ *     #2 0x000100885388 in flecs_rtt_struct_dtor flecs/src/addons/meta/rtt_lifecycle.c:125:5
+ *     #3 0x000100885388 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ *     #4 0x000100885388 in flecs_rtt_struct_dtor flecs/src/addons/meta/rtt_lifecycle.c:125:5
+ *     #5 0x000100885388 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ *     #6 0x000100885388 in flecs_rtt_struct_dtor flecs/src/addons/meta/rtt_lifecycle.c:125:5
+ *     #7 0x000100885388 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ *     #8 0x000100885388 in flecs_rtt_struct_dtor flecs/src/addons/meta/rtt_lifecycle.c:125:5
+ *     #9 0x000100885388 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ *     #10 0x000100885388 in flecs_rtt_struct_dtor flecs/src/addons/meta/rtt_lifecycle.c:125:5
+ *     #11 0x000100885388 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ */
+void Fuzzing_128(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE "using flecs.script.math"
+    LINE ""
+    LINE "struct Vec4 {"
+    LINE " dd,#9\\64"
+    LINE "  y = f64"
+    LINE "tion {"
+    LINE "x = string"
+    LINE "}"
+    LINE " mixed = Vec4"
+    LINE "  norm = Vec4"
+    LINE " se = Vec4"
+    LINE "  add = Vec4"
+    LINE "  sub = Vec4"
+    LINE "  scaled = Vec4"
+    LINE "  mixed = Vec4"
+    LINE "  norm = Vec4"
+    LINE "  dot_value = f64"
+    LINE "  len_value = f64"
+    LINE "}"
+    LINE ""
+    LINE "source_a {"
+    LINE "  Vec4: {1, 2, 3, 4}"
+    LINE "}"
+    LINE ""
+    LINE "s\\u"
+    LINE ""
+        ;
+
     install_test_abort();
     test_expect_abort();
     fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000000,sig:11,src:003249,time:3082286,execs:498535,op:havoc,rep:2, sha1=73a7b0fbc4209740ceff503fa172c9183b771523, grouped_crashes=1
+ * asan_stack:
+ *     #0 0x0001048620dc in flecs_emit_forward flecs/src/observable.c:1041:53
+ *     #1 0x0001048620dc in flecs_emit flecs/src/observable.c:1443:13
+ *     #2 0x0001048df7b4 in flecs_table_emit flecs/src/storage/table.c:526:5
+ *     #3 0x0001048df7b4 in flecs_table_fini flecs/src/storage/table.c:1291:13
+ *     #4 0x0001048ca970 in flecs_component_release_tables flecs/src/storage/component_index.c:866:13
+ *     #5 0x00010486f264 in flecs_on_delete_clear_ids flecs/src/on_delete.c:636:17
+ *     #6 0x00010486f264 in flecs_on_delete flecs/src/on_delete.c:713:9
+ *     #7 0x00010486f9fc in ecs_delete_with flecs/src/on_delete.c:743:5
+ *     #8 0x0001047c58b8 in ecs_script_update flecs/src/addons/script/script.c:254:9
+ *     #9 0x0001046d8adc in fuzz_script_update fuzz/flecs_script_harness.c:151:5
+ *     #10 0x0001046d8adc in main fuzz/flecs_script_harness.c:179:9
+ *     #11 0x00018302eb94  (<unknown module>)
+ */
+void Fuzzing_129(void) {
+    const char *expr =
+    HEAD "using flecs.met "
+    LINE ""
+    LINE "struct Label {"
+    LINE "  valuuuuuuuuuuuuuuuuuuuuuuuussage {"
+    LINE "  a = string"
+    LINE "  b = string"
+    LINE "}"
+    LINE ""
+    LINE "const ship_name: \"Voyager\""
+    LINE "const sector: 7"
+    LINE "const x: 12"
+    LINE "const y: -3"
+    LINE "const speed: 42using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Station {}"
+    LINE "Faction {}"
+    LINE "Rel {}"
+    LINE "Tgt {}"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  radius = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "struct Shades {"
+    LINE "  filename = string"
+    LINE "  code = string"
+    LINE "}"
+    LINE ""
+    LINE "enum Team {"
+    LINE "  Red,"
+    LINE "  Blue"
+    LINE "}"
+    LINE ""
+    LINE "const orbit_radius: 32.5"
+    LINE ""
+    LINE "Earth { Planet }"
+    LINE "Mars { Planet }"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "    Orbit: {radius: $orbit_radius, phase: $phase}"
+    LINE "    Team: {Blue}"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree Parent"
+    LINE "parent_root {"
+    LINE "  Nameplate: {\"parent storage root\"}"
+    LINE ""
+    LINE "  fleet_alpha {"
+    LINE "    (Faction, Earth)"
+    LINE "    Team: {Red}"
+    LINE "    Outpost: {phase: 0.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf"
+    LINE "childof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost: {phase: 1.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  doc}"
+    LINE ""
+    LINE "struk_b {"
+    LINE "    @tree Parent"
+    LINE "    parent_section {"
+    LINE "      nested_parent_a {}"
+    LINE "      nested_parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "mixe"
+    LINE ""
+    LINE "\020"
+    LINE "ot {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Station): {"
+    LINE "  filename: \"station.glsl\","
+    LINE "      code: `"
+    LINE "        void main() \\{"
+    LINE "          gl_Posi_ion = vec4(0.0);"
+    LINE "        }`"
+    LINE "  "
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000001,sig:11,src:004588,time:6692888,execs:1046549,op:havoc,rep:1, sha1=29f7f003304a1926b3cc7ec0f24414ae26a2ff27, grouped_crashes=1
+ * asan_stack:
+ *     #0 0x000104d363c0 in flecs_path_elem flecs/src/entity_name.c
+ *     #1 0x000104d359a0 in ecs_lookup_path_w_sep flecs/src/entity_name.c:734:19
+ *     #2 0x000104d16bd0 in ecs_entity_init flecs/src/entity.c:1334:22
+ *     #3 0x000104cb9ccc in flecs_script_create_entity flecs/src/addons/script/visit_eval.c:352:12
+ *     #4 0x000104cbdc6c in flecs_script_eval_entity flecs/src/addons/script/visit_eval.c:762:22
+ *     #5 0x000104cbdc6c in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1701:16
+ *     #6 0x000104cb6b0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #7 0x000104cbb3f4 in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #8 0x000104cbcb1c in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1654:16
+ *     #9 0x000104cb71f0 in ecs_script_visit_node_ flecs/src/addons/script/visit.c:151:9
+ *     #10 0x000104cb71f0 in ecs_script_visit_from_ flecs/src/addons/script/visit.c:175:18
+ *     #11 0x000104cb71f0 in ecs_script_visit_ flecs/src/addons/script/visit.c:197:12
+ */
+void Fuzzing_130(void) {
+    const char *expr =
+    HEAD "```''<'''. =!f'''!'''g '''\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'''''''`"
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000002,sig:06,src:005474,time:6916326,execs:1074737,op:havoc,rep:2, sha1=3b2e6bb41ce4f13621a01a732649b8aa87f984d9, grouped_crashes=71
+ * asan_stack:
+ *     #0 0x0001028540c0 in flecs_script_number flecs/src/addons/parser/tokenizer.c:593:23
+ *     #1 0x0001028540c0 in flecs_token flecs/src/addons/parser/tokenizer.c:807:16
+ *     #2 0x0001028765a8 in flecs_script_parse_lhs flecs/src/addons/script/expr/parser.c:453:5
+ *     #3 0x00010287828c in flecs_script_parse_rhs flecs/src/addons/script/expr/parser.c:329:9
+ *     #4 0x00010287828c in flecs_script_parse_lhs flecs/src/addons/script/expr/parser.c:711:12
+ *     #5 0x0001028761cc in flecs_script_parse_expr flecs/src/addons/script/expr/parser.c:737:11
+ *     #6 0x0001028c2188 in flecs_expr_interpolated_string_visit_type flecs/src/addons/script/expr/visit_type.c:742:23
+ *     #7 0x0001028c2188 in flecs_expr_visit_type_priv flecs/src/addons/script/expr/visit_type.c:2193:13
+ *     #8 0x0001028c178c in flecs_expr_visit_type flecs/src/addons/script/expr/visit_type.c:2334:16
+ *     #9 0x0001028f1950 in flecs_script_eval_name_expr flecs/src/addons/script/visit_eval.c:190:13
+ *     #10 0x0001028f5c30 in flecs_script_eval_entity flecs/src/addons/script/visit_eval.c:756:22
+ *     #11 0x0001028f5c30 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1701:16
+ */
+void Fuzzing_131(void) {
+    const char *expr =
+    HEAD "```'0cs.meta.f64: {10-211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111#111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111q1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110-2e-1}"
+    LINE "64: {10-210-2e-1}"
+    LINE "}"
+    LINE "\202 ''}"
+    LINE "\202 '''''on''''''!'''g'-3"
+    LINE "con y:\022 y''''''D'\"'''g'-3str"
+    LINE "  y!= f\t   10,'''''5''`"
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000008,sig:06,src:005505,time:7028716,execs:1094279,op:havoc,rep:2, sha1=f52a7fa88b7466d45435fb65afe6be74a0f75c91, grouped_crashes=6
+ * asan_stack:
+ *     #0 0x000102b163c0 in flecs_path_elem flecs/src/entity_name.c
+ *     #1 0x000102b16d1c in ecs_add_path_w_sep flecs/src/entity_name.c:922:23
+ *     #2 0x000102af8020 in flecs_traverse_add flecs/src/entity.c:1027:14
+ *     #3 0x000102af8020 in ecs_entity_init flecs/src/entity.c:1404:13
+ *     #4 0x000102a99ccc in flecs_script_create_entity flecs/src/addons/script/visit_eval.c:352:12
+ *     #5 0x000102a99998 in flecs_script_eval_name_expr flecs/src/addons/script/visit_eval.c:214:18
+ *     #6 0x000102a9dc30 in flecs_script_eval_entity flecs/src/addons/script/visit_eval.c:756:22
+ *     #7 0x000102a9dc30 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1701:16
+ *     #8 0x000102a96b0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #9 0x000102a9b3f4 in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #10 0x000102a9cb1c in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1654:16
+ *     #11 0x000102a971f0 in ecs_script_visit_node_ flecs/src/addons/script/visit.c:151:9
+ */
+void Fuzzing_132(void) {
+    const char *expr =
+    HEAD "```'0cs.meta.\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\00164: {10-210-2e-1}"
+    LINE "64: {!0-210-2e-1}"
+    LINE "}"
+    LINE "\202 ''}"
+    LINE "\202 '''''on''''''!'''g'-3"
+    LINE "con y:\022 y''''''D'\"'''g'-3str"
+    LINE "  y!= f\t   10,'''''5''`"
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000013,sig:11,src:000768+005475,time:8314754,execs:1310000,op:splice,rep:1, sha1=881d5cb5520cefa722d16836339e22569ba1a4cc, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x0001026063c0 in flecs_path_elem flecs/src/entity_name.c
+ *     #1 0x0001026059a0 in ecs_lookup_path_w_sep flecs/src/entity_name.c:734:19
+ *     #2 0x000102589310 in flecs_script_find_entity flecs/src/addons/script/visit_eval.c:257:38
+ *     #3 0x00010258a410 in flecs_script_eval_id flecs/src/addons/script/visit_eval.c:451:9
+ *     #4 0x00010258cf40 in flecs_script_eval_tag flecs/src/addons/script/visit_eval.c:878:9
+ *     #5 0x00010258cf40 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1657:16
+ *     #6 0x000102586b0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #7 0x00010258b3f4 in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #8 0x00010258cb1c in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1654:16
+ *     #9 0x0001025871f0 in ecs_script_visit_node_ flecs/src/addons/script/visit.c:151:9
+ *     #10 0x0001025871f0 in ecs_script_visit_from_ flecs/src/addons/script/visit.c:175:18
+ *     #11 0x0001025871f0 in ecs_script_visit_ flecs/src/addons/script/visit.c:197:12
+ */
+void Fuzzing_133(void) {
+    const char *expr =
+    HEAD "foo {}"
+    LINE ""
+    LINE "b\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\325\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000017,sig:11,src:006293,time:11132002,execs:1733808,op:havoc,rep:1, sha1=c85fe243537ea941fd2d9034a7d8ecde65e5ed2c, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x00010020e3c0 in flecs_path_elem flecs/src/entity_name.c
+ *     #1 0x00010020d9a0 in ecs_lookup_path_w_sep flecs/src/entity_name.c:734:19
+ *     #2 0x000100191310 in flecs_script_find_entity flecs/src/addons/script/visit_eval.c:257:38
+ *     #3 0x0001001920e4 in flecs_script_find_entity_action flecs/src/addons/script/visit_eval.c:363:10
+ *     #4 0x0001001651e4 in flecs_expr_identifier_visit_type flecs/src/addons/script/expr/visit_type.c:1303:26
+ *     #5 0x000100162570 in flecs_expr_visit_type_priv flecs/src/addons/script/expr/visit_type.c:2228:13
+ *     #6 0x0001001617d8 in flecs_expr_visit_type flecs/src/addons/script/expr/visit_type.c:2338:16
+ *     #7 0x000100193030 in flecs_script_eval_expr flecs/src/addons/script/visit_eval.c:546:13
+ *     #8 0x000100194188 in flecs_script_eval_const flecs/src/addons/script/visit_eval.c:1416:13
+ *     #9 0x000100194bc8 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c
+ *     #10 0x00010018eb0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #11 0x0001001933f4 in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ */
+void Fuzzing_134(void) {
+    const char *expr =
+    HEAD "foo {}"
+    LINE ""
+    LINE "const x: nd\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ nd\\.5.5\\"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000019,sig:11,src:006380,time:11567157,execs:1802823,op:havoc,rep:6, sha1=ea9a0d9edd0598de582b6d5d95936d13ba165200, grouped_crashes=1
+ */
+void Fuzzing_135(void) {
+    const char *expr =
+    HEAD "```-2e-1}"
+    LINE "\3114: {1==010-'\\F'}"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf"
+    LINE "childof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost{"
+    LINE "    (Rel, Tgt) }"
+    LINE ""
+    LINE "  dock_b {"
+    LINE "    @tree Parent"
+    LINE "    parent_section {"
+    LINE "      nested_parent_a {}"
+    LINE "      nested_parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "mixed_root {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Stati2e-V}"
+    LINE "\3114: {1<=010-'g'}'o\221'''''\235'D''''\020'5''`"
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer02/crashes/id:000000,sig:11,src:000941,time:514022,execs:68569,op:havoc,rep:2, sha1=8ba48b3f1977af932b8194e9fa1bbd1e05e7971c, grouped_crashes=1
+ */
+void Fuzzing_136(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "struct Label {alue = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Message {"
+    LINE "  a = string"
+    LINE "  b = string"
+    LINE "}"
+    LINE ""
+    LINE "const ship_name: \"Voyager\""
+    LINE "const sector: 7"
+    LINE "const x: 12"
+    LINE "const y: -3"
+    LINE "const speed: 42.5"
+    LINE "const escaped:-\"variable \\....... \"g\"]"
+    LINE " ame}_{($sector *\" {"
+    LINE "  Label: {\"$ship_name @ sector {$sector}, pos=({$x}, {$y}), "
+    LINE "    {x: 20, y: 10}"
+    LINE "  ]"
+    LINE ""
+    LINE "  Posihalf_speed={($speed / 2) + 1}\"}"
+    LINE "e: {"
+    LINE "a: \"distance_sq={($x * $x) + ($y * $y)}\""
+    LINE "    b: $escape}"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer02/crashes/id:000001,sig:11,src:001074,time:644030,execs:91077,op:havoc,rep:2, sha1=c6bf108fd1b562433bd20d5d399f4b568522a081, grouped_crashes=1
+ */
+void Fuzzing_137(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "struct Label {alue = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Mess{"
+    LINE "string"
+    LINE "}"
+    LINE ""
+    LINE "const ship_name: \"Voyager\""
+    LINE "const sector: 7"
+    LINE "const x: 12"
+    LINE "const y: -3"
+    LINE "const speed: 42.5"
+    LINE "const eed:-\"variable \\....... \"g\"]"
+    LINE " ame}_{($sector *\" {"
+    LINE "  L: {\"$ship_name @ sector {$sector}, pos=({$x}, ~$y}), half_speed={($speed / 2) + 1}\"}"
+    LINE "e: {"
+    LINE "a: \"distance_sq={($x * $x) + ($y * $y)}\""
+    LINE "    b: $ee}"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer02/crashes/id:000002,sig:11,src:001323,time:782212,execs:115505,op:havoc,rep:1, sha1=82ba3e8084b644353daf191d35431f3097aad5b0, grouped_crashes=1
+ */
+void Fuzzing_138(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "struct Labess{"
+    LINE "string"
+    LINE "}"
+    LINE ""
+    LINE "const ship_name: \"Voyager\""
+    LINE "const or: 7"
+    LINE "const x: 12"
+    LINE "const y: -3"
+    LINE "const d: 42.5"
+    LINE "const eed:-\"variable \\....... \"g\"]"
+    LINE " ame}_{($sector *\" {"
+    LINE "  L: {\"$ship_name @ sector {$sector}, pos=({$x}, {$y}), half_speed={($speed / 2) + 1}\"}"
+    LINE "e: {"
+    LINE "a: \"distance_sq={($x * $x) + ($y * $y)}\""
+    LINE "    b: $ee}"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer03/crashes/id:000000,sig:11,src:003857,time:4946367,execs:817108,op:havoc,rep:1, sha1=c836ef044c0674c75fa60bcbebb7c6d8b149c52a, grouped_crashes=6
+ * asan_stack:
+ *     #0 0x0001055daa30 in realloc (/opt/homebrew/Cellar/llvm/20.1.8/lib/clang/20/lib/darwin/libclang_rt.asan_osx_dynamic.dylib:arm64+0x52a30)
+ *     #1 0x000104bb2134 in ecs_vec_set_size flecs/src/datastructures/vec.c:224:28
+ *     #2 0x000104bb2134 in ecs_vec_append flecs/src/datastructures/vec.c:426:9
+ *     #3 0x000104b5fad4 in flecs_script_eval_using flecs/src/addons/script/visit_eval.c:1299:9
+ *     #4 0x000104b612d4 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1681:16
+ *     #5 0x000104b5ab0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #6 0x000104b5f3f4 in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #7 0x000104b60b1c in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1654:16
+ *     #8 0x000104b5aeb4 in ecs_script_visit_node_ flecs/src/addons/script/visit.c:151:9
+ *     #9 0x000104b62408 in flecs_script_eval_entity flecs/src/addons/script/visit_eval.c:818:9
+ *     #10 0x000104b62408 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1701:16
+ *     #11 0x000104b5ab0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ */
+void Fuzzing_140(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Station {}"
+    LINE "Faction {}"
+    LINE "Rel {}"
+    LINE "Tgt {}"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  radius = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "struct Shader {"
+    LINE "  filename = string"
+    LINE "  code = string"
+    LINE "}"
+    LINE ""
+    LINE "enum Team {"
+    LINE "  Red,"
+    LINE "  Blue"
+    LINE "}"
+    LINE ""
+    LINE "const orbit_radius: 32.5"
+    LINE ""
+    LINE "Earth { Planet }"
+    LINE "Mars { Planet }"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "    Orbit: {radius: $orbit_radius, phase: $phase}"
+    LINE "    Team: {Blue}"
+    LINE "using flecs.meta"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree Parent"
+    LINE "parent_root {"
+    LINE "  Nameplate: {\"parent storage root\"}"
+    LINE ""
+    LINE "  fleet_alpha {"
+    LINE "    (Faction, Earth)"
+    LINE "    Team: {Red}"
+    LINE "    Outpost: {phase: 0.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Stati"
+    LINE "dof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost: {phase: 1.5}"
+    LINE "  }"
+    LINE ""
+    LINE "ck_b {"
+    LINE "    @tree Parent"
+    LINE "    parent_section {"
+    LINE "      nested_parent_a {}"
+    LINE "      nested_parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE "ed_root {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Station): {"
+    LINE "  filename: \"station.glsus = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "strl\","
+    LINE "  code: `"
+    LINE "        void main() \\{"
+    LINE "          gl_Position = vec4(0.0);"
+    LINE "        }`   }"
+    LINE "  }"
+    LINE ""
+    LINE "  @tree Pa"
+    LINE "  parent_zone {"
+    LINE "    (Rel, Tgt) {"
+    LINE "      relay {"
+    LINE "@tree Chf"
+    LINE "  uct   links {"
+    LINE "          link_a {}"
+    LINE "          linkDb {}"
+    LINE "        }"
+    LINE "      }"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer03/crashes/id:000001,sig:11,src:003857,time:4946564,execs:817137,op:havoc,rep:1, sha1=61607ce78575e056391d52c735ca4d7915241f70, grouped_crashes=4
+ * asan_stack:
+ *     #0 0x0001015ae93c in free (/opt/homebrew/Cellar/llvm/20.1.8/lib/clang/20/lib/darwin/libclang_rt.asan_osx_dynamic.dylib:arm64+0x5293c)
+ *     #1 0x000100c54894 in ecs_vec_fini flecs/src/datastructures/vec.c:94:13
+ *     #2 0x000100bf8acc in flecs_script_template_fini flecs/src/addons/script/template.c:535:5
+ *     #3 0x000100bf6b00 in EcsScript_dtor flecs/src/addons/script/script.c:41:1
+ *     #4 0x000100d0e764 in flecs_table_dtor_all flecs/src/storage/table.c:1138:13
+ *     #5 0x000100d0e764 in flecs_table_fini_data flecs/src/storage/table.c:1187:5
+ *     #6 0x000100d0f864 in flecs_table_fini flecs/src/storage/table.c:1305:5
+ *     #7 0x000100d31078 in flecs_clean_tables flecs/src/world.c:567:9
+ *     #8 0x000100d31078 in flecs_fini_store flecs/src/world.c:680:5
+ *     #9 0x000100d31078 in ecs_fini flecs/src/world.c:1303:5
+ *     #10 0x000100b08a5c in fuzz_script_run fuzz/flecs_script_harness.c:108:5
+ *     #11 0x000100b08a5c in main fuzz/flecs_script_harness.c:178:9
+ */
+void Fuzzing_141(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Station {}"
+    LINE "Faction {}"
+    LINE "Rel {}"
+    LINE "Tgt {}"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  radius = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "struct Shader {"
+    LINE "  filename = string"
+    LINE "  code = string"
+    LINE "}"
+    LINE ""
+    LINE "enum Team {"
+    LINE "  Red,"
+    LINE "  Blue"
+    LINE "}"
+    LINE ""
+    LINE "const orbit_radius: 32.5"
+    LINE ""
+    LINE "Earth { Planet }"
+    LINE "Nars { Planet }"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "    Orbit: {radius: $orbit_radius, phase: $phase}"
+    LINE "    Team: {Blue}"
+    LINE "using flecs.meta"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree Parent"
+    LINE "parent_root {"
+    LINE "  Nameplate: {\"parent storage root\"}"
+    LINE ""
+    LINE "  fleet_alpha {"
+    LINE "    (Faction, Earth)"
+    LINE "    Team: {Red}"
+    LINE "    Outpost: {phase: 0.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Stati"
+    LINE "dof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost: {phase: 1.5}"
+    LINE "  }"
+    LINE ""
+    LINE "ck_b {"
+    LINE "    @tree Parent"
+    LINE "    parent_section {"
+    LINE "      nested_parent_a {}"
+    LINE "      nested_parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE "ed_root {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Station): {"
+    LINE "  filename: \"station.glsl\","
+    LINE "  code: `"
+    LINE "        void main() \\{"
+    LINE "          gl_Position = vec4(0.0);"
+    LINE "        }`   }"
+    LINE "  }"
+    LINE ""
+    LINE "  @tree Pa"
+    LINE "  parent_zone {"
+    LINE "    (Rel, Tgt) {"
+    LINE "      relay {"
+    LINE "@tree Chf"
+    LINE "  uct   links {"
+    LINE "          link_a {}"
+    LINE "          linkDb {}"
+    LINE "        }"
+    LINE "      }"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer04/crashes/id:000018,sig:07,src:003588+005495,time:9514977,execs:1465181,op:splice,rep:1, sha1=802df47e4a3062ce996dcedb86ec6eb517db8025, grouped_crashes=1
+ * asan_stack:
+ *     #0 0x000104c1b134 in ecs_string_t_dtor flecs/src/addons/meta/type_support/primitive_ts.c:23:8
+ *     #1 0x000104c0d378 in flecs_rtt_struct_xtor flecs/src/addons/meta/rtt_lifecycle.c:92:13
+ *     #2 0x000104c0d378 in flecs_rtt_struct_dtor flecs/src/addons/meta/rtt_lifecycle.c:125:5
+ *     #3 0x000104df504c in ecs_value_fini_w_type_info flecs/src/value.c:87:9
+ *     #4 0x000104df504c in ecs_value_free flecs/src/value.c:117:9
+ *     #5 0x000104c974dc in flecs_expr_value_visit_free flecs/src/addons/script/expr/visit_free.c:17:9
+ *     #6 0x000104c974dc in flecs_expr_visit_free flecs/src/addons/script/expr/visit_free.c:164:9
+ *     #7 0x000104cd0f28 in flecs_script_component_free flecs/src/addons/script/visit_free.c:105:5
+ *     #8 0x000104cd0f28 in flecs_script_stmt_free flecs/src/addons/script/visit_free.c:165:9
+ *     #9 0x000104cc6b0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #10 0x000104cd147c in flecs_script_scope_free flecs/src/addons/script/visit_free.c:16:5
+ *     #11 0x000104cd147c in flecs_script_entity_free flecs/src/addons/script/visit_free.c:57:5
+ */
+void Fuzzing_144(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Station {}"
+    LINE "Faction {}"
+    LINE "Rel {}"
+    LINE "Tgt {}"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  valuE = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  radius = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+        ;
+
+    install_test_abort();
+    test_expect_abort();
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer05/crashes/id:000000,sig:11,src:001897,time:5200818,execs:838518,op:havoc,rep:1, sha1=aa899f807fe5e122129f1b10d0810620a358b8f5, grouped_crashes=4
+ * asan_stack:
+ *     #0 0x000102ef6a30 in realloc (/opt/homebrew/Cellar/llvm/20.1.8/lib/clang/20/lib/darwin/libclang_rt.asan_osx_dynamic.dylib:arm64+0x52a30)
+ *     #1 0x00010239a134 in ecs_vec_set_size flecs/src/datastructures/vec.c:224:28
+ *     #2 0x00010239a134 in ecs_vec_append flecs/src/datastructures/vec.c:426:9
+ *     #3 0x000102347ad4 in flecs_script_eval_using flecs/src/addons/script/visit_eval.c:1299:9
+ *     #4 0x0001023492d4 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1681:16
+ *     #5 0x000102342b0c in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #6 0x0001023473f4 in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #7 0x00010234014c in flecs_script_template_instantiate flecs/src/addons/script/template.c:233:9
+ *     #8 0x00010233eea4 in flecs_on_template_set_event flecs/src/addons/script/template.c:264:5
+ *     #9 0x0001023dadc0 in flecs_observer_invoke flecs/src/observer.c
+ *     #10 0x0001023dadc0 in flecs_uni_observer_invoke flecs/src/observer.c:444:13
+ *     #11 0x0001023dadc0 in flecs_observers_invoke flecs/src/observer.c:518:13
+ */
+void Fuzzing_145(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "Planet {}"
+    LINE "Station {}"
+    LINE "Faction {}"
+    LINE "Rel {}"
+    LINE "Tgt {}"
+    LINE ""
+    LINE "struct Nameplate {"
+    LINE "  value = string"
+    LINE "}"
+    LINE ""
+    LINE "struct Orbit {"
+    LINE "  radius = f64"
+    LINE "  phase = f64"
+    LINE "}"
+    LINE ""
+    LINE "struct Shader {"
+    LINE "  fiUename = string"
+    LINE "  code = string"
+    LINE "}"
+    LINE ""
+    LINE "enum Team {"
+    LINE "  Red,"
+    LINE "  Blue"
+    LINE "}"
+    LINE ""
+    LINE "const orbit_radius: 32.5"
+    LINE ""
+    LINE "Earth { Planet }"
+    LINE "Mars { Planet }"
+    LINE ""
+    LINE "template Outpost {"
+    LINE "using flecs.meta"
+    LINE ""
+    LINE "  prop phase = flecs.meta.f64: 0.25"
+    LINE ""
+    LINE "  station {"
+    LINE "    Nameplate: {\"outpion\"}"
+    LINE "    Orbit: {radius: $orbit_radius, phase: $phase}"
+    LINE "    Team: {Blue}"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree Parent"
+    LINE "parent_root {"
+    LINE "  Nameplate: {\"parent storage root\"}"
+    LINE ""
+    LINE "  fleet_alpha {"
+    LINE "    (Faction, Earth)"
+    LINE "    Team: {Red}"
+    LINE "    Outpost: {phase: 0.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  fleet_beta {"
+    LINE "    (Faction, Mars)"
+    LINE "    Outpost: {phase: 1.0}"
+    LINE ""
+    LINE "    {"
+    LINE "      Nameplate: {\"anonymous maintenance bay\"}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "@tree ChildOf"
+    LINE "childof_root {"
+    LINE "  dock_a {"
+    LINE "    Outpost: {phase: 1.5}"
+    LINE "  }"
+    LINE ""
+    LINE "  dock_b {"
+    LINE "    @tree Parent"
+    LINE "    parentusection {"
+    LINE "      nested_parent_a {}"
+    LINE "      nested_parent_b {}"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+    LINE "mixed_root {"
+    LINE "  shader_bank {"
+    LINE "    (Shader, Station): {"
+    LINE "  filename: \"station.glsl\","
+    LINE "      code: `"
+    LINE "        void main() \\{"
+    LINE "          gl_Position = vec4(0.0);"
+    LINE "        }`"
+    LINE "      }"
+    LINE "  }"
+    LINE ""
+    LINE "  @tree Parent"
+    LINE "  parent_zone {"
+    LINE "    (Rel, Tgt) {"
+    LINE "      relay {"
+    LINE "        @tree ChildOf"
+    LINE "        links {"
+    LINE "          link_a {}"
+    LINE "          link_b {}"
+    LINE "        }"
+    LINE "      }"
+    LINE "    }"
+    LINE "  }"
+    LINE "}"
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer05/crashes/id:000004,sig:11,src:003488,time:7089413,execs:1111171,op:havoc,rep:1, sha1=738d7ee0255f3f0982f2a30ec8563b6bfc421ede, grouped_crashes=2
+ * asan_stack:
+ *     #0 0x000104d83858 in __sanitizer::CombinedAllocator<__sanitizer::SizeClassAllocator64<__asan::AP64<__sanitizer::LocalAddressSpaceView>>, __sanitizer::LargeMmapAllocatorPtrArrayDynamic>::Allocate(__sanitizer::SizeClassAllocator64LocalCache<__sanitizer::SizeClassAllocator64<__asan::AP64<__sanitizer::LocalAddressSpaceView>>>*, unsigned long, unsigned long) (/opt/homebrew/Cellar/llvm/20.1.8/lib/clang/20/lib/darwin/libclang_rt.asan_osx_dynamic.dylib:arm64+0x7858)
+ *     #1 0x000104d7e9b4 in __asan::asan_malloc(unsigned long, __sanitizer::BufferedStackTrace*) (/opt/homebrew/Cellar/llvm/20.1.8/lib/clang/20/lib/darwin/libclang_rt.asan_osx_dynamic.dylib:arm64+0x29b4)
+ *     #2 0x000104dce8b0 in malloc (/opt/homebrew/Cellar/llvm/20.1.8/lib/clang/20/lib/darwin/libclang_rt.asan_osx_dynamic.dylib:arm64+0x528b0)
+ *     #3 0x00010423fc74 in ecs_os_memdup flecs/src/misc.c:114:17
+ *     #4 0x000104207410 in ecs_strbuf_get flecs/src/datastructures/strbuf.c:447:18
+ *     #5 0x000104234f1c in ecs_id_str flecs/src/id.c:286:12
+ *     #6 0x0001042ac3bc in flecs_component_new flecs/src/storage/component_index.c:653:15
+ *     #7 0x0001042abcdc in flecs_components_ensure flecs/src/storage/component_index.c:777:14
+ *     #8 0x0001042abcdc in flecs_component_new flecs/src/storage/component_index.c:535:24
+ *     #9 0x0001042bfc50 in flecs_table_init flecs/src/storage/table.c:622:14
+ *     #10 0x0001042d9d5c in flecs_init_table flecs/src/storage/table_graph.c:548:5
+ *     #11 0x0001042d9d5c in flecs_table_new flecs/src/storage/table_graph.c:605:5
+ */
+void Fuzzing_146(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE ""
+    LINE "struct Attack {"
+    LINE "  value = f32"
+    LINE "}"
+    LINE ""
+    LINE "struct Defense {"
+    LINE "  value = f32"
+    LINE "}"
+    LINE ""
+    LINE "prefab Ship {"
+    LINE "  Attack: {10}"
+    LINE "  Defense: {5}"
+    LINE "}"
+    LINE ""
+    LINE "prefab Tank : Ship {"
+    LINE "  Attack: {20}"
+    LINE "  Defense: {25} {"
+    LINE "  k : Tank {}"
+    LINE " }"
+    LINE "battleJtank : Tank {}"
+    LINE "  s_b {}"
+    LINE "}"
+    LINE ""
+    LINE ""
+        ;
+
+    install_test_abort();
+
+    test_expect_abort();
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer06/crashes/id:000000,sig:11,src:005494,time:6424436,execs:1003935,op:havoc,rep:1, sha1=01a84b9966efb73b591638ff0166ad7f05d29795, grouped_crashes=1
+ */
+void Fuzzing_147(void) {
+    const char *expr =
+    HEAD "using flecs.meta"
+    LINE "using flecs.script.math"
+    LINE ""
+    LINE "struct Vec4 {"
+    LINE "  x = f64"
+    LINE " "
+    LINE "  y = 2"
+    LINE "  add = Vec4"
+    LINE "   y = f64"
+    LINE "  z = f64"
+    LINE "  w = f64"
+    LINE "}"
+    LINE ""
+    LINE "struct VectorBundle {"
+    LINE "  base = Vec4"
+    LINE "  add = Vec4"
+    LINE " @sub = Vec4"
+    LINE "  scaled = Vec4"
+    LINE "  mixed = Vec4"
+    LINE "  norm = Vec4"
+    LINE "  dotlen_value = f64"
+    LINE "}"
+    LINE ""
+    LINE "source_a {"
+    LINE "  Vec4: {1, 2, 3, E}"
+    LINE "}"
+    LINE ""
+    LINE "source_b {"
+    LINE "  Vec4: {4, 3, 2, 1}"
+    LINE "}"
+    LINE ""
+    LINE "const a: source_a[Vec4]"
+    LINE "const b: source_b[Vec4]"
+    LINE ""
+    LINE "const add_v: $a + $b"
+    LINE "const subgv: $to. o.5\\"
+        ;
+
+    install_test_abort();
+    test_expect_abort();
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000000,sig:07,src:004563,time:11309477,execs:680016,op:havoc,rep:2, sha1=36ddae5ede5747df9862a5579c6b4f72988c8c4b, grouped_crashes=3
+ * asan_stack:
+ *     #0 0x000102916114 in ecs_get_typeid flecs/src/id.c:343:9
+ *     #1 0x00010289a8c0 in flecs_script_can_default_ctor flecs/src/addons/script/visit_eval.c:877:25
+ *     #2 0x00010289a8c0 in flecs_script_eval_component flecs/src/addons/script/visit_eval.c:959:14
+ *     #3 0x00010289a8c0 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1677:16
+ *     #4 0x000102893574 in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #5 0x000102897e5c in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ *     #6 0x000102899584 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1671:16
+ *     #7 0x00010289391c in ecs_script_visit_node_ flecs/src/addons/script/visit.c:151:9
+ *     #8 0x00010289b140 in flecs_script_eval_entity flecs/src/addons/script/visit_eval.c:835:9
+ *     #9 0x00010289b140 in flecs_script_eval_node flecs/src/addons/script/visit_eval.c:1718:16
+ *     #10 0x000102893574 in ecs_script_visit_scope_ flecs/src/addons/script/visit.c:129:13
+ *     #11 0x000102897e5c in flecs_script_eval_scope flecs/src/addons/script/visit_eval.c:596:18
+ */
+void Fuzzing_149(void) {
+    const char *expr =
+    HEAD ""
+    LINE "@tree Parent"
+    LINE "e {"
+    LINE "  \013@t\202ee COfusing flecs.meta"
+    LINE ""
+    LINE "struct Attack {"
+    LINE "  value = f32"
+    LINE "}"
+    LINE ""
+    LINE "struct Defense {"
+    LINE "///PosDefense:ck: {20}"
+    LINE "  /////"
+    LINE "  Attack: {10}"
+    LINE "  Defense: {5}"
+    LINE "}"
+    LINE ""
+    LINE "prefab Tank : Ship {"
+    LINE "  Atta}"
+    LINE "  /////////  value = f32"
+    LINE "}"
+    LINE ""
+    LINE "prefab Ship {///////PosDefense: {25}"
+    LINE "}"
+    LINE ""
+    LINE "with Ship {"
+    LINE " ut_a {}"
+    LINE " #scout_b {}"
+    LINE "}"
+    LINE ""
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+/* crash=out/fuzzer01/crashes/id:000003,sig:11,src:004632,time:11453873,execs:703838,op:havoc,rep:1, sha1=338d7a6bb81a601d3638769744cf0891ab5e6aeb, grouped_crashes=1
+ * asan_stack:
+ *     #0 0x0001005131d4 in flecs_type_info_flags flecs/src/storage/table.c:104:19
+ *     #1 0x0001005131d4 in flecs_table_init_columns flecs/src/storage/table.c:174:25
+ *     #2 0x0001005131d4 in flecs_table_init_data flecs/src/storage/table.c:206:5
+ *     #3 0x0001005157c4 in flecs_table_init flecs/src/storage/table.c:824:5
+ *     #4 0x00010052eae0 in flecs_init_table flecs/src/storage/table_graph.c:548:5
+ *     #5 0x00010052eae0 in flecs_table_new flecs/src/storage/table_graph.c:605:5
+ *     #6 0x00010052a320 in flecs_table_ensure flecs/src/storage/table_graph.c
+ *     #7 0x000100529960 in flecs_find_table_with flecs/src/storage/table_graph.c:1034:12
+ *     #8 0x000100529960 in flecs_create_edge_for_add flecs/src/storage/table_graph.c:1174:23
+ *     #9 0x00010052bfac in flecs_table_traverse_add flecs/src/storage/table_graph.c:1236:14
+ *     #10 0x00010052bfac in flecs_find_table_add flecs/src/storage/table_graph.c:1447:13
+ *     #11 0x000100468d28 in flecs_traverse_add flecs/src/entity.c:1058:21
+ */
+void Fuzzing_150(void) {
+    const char *expr =
+    HEAD ""
+    LINE "@tree Parent"
+    LINE "e {"
+    LINE "  \013@tree COfusing flecs.meta"
+    LINE ""
+    LINE "struct Attack {"
+    LINE "  value = f32"
+    LINE "}"
+    LINE ""
+    LINE "struct Defense {"
+    LINE "  value = f32"
+    LINE "{"
+    LINE ""
+    LINE "prefab Ship {"
+    LINE "  Attack: {10}"
+    LINE "  Defense:{25}"
+    LINE "}"
+    LINE ""
+    LINE "with Ship {"
+    LINE " ut_a {}"
+    LINE " #scoa}"
+    LINE "  ////////////PosDefense:ck: {20}"
+    LINE "  ////////////PosDefense:  {5}"
+    LINE "}"
+    LINE ""
+    LINE "prefab Tank : Ship {"
+    LINE "  Attut_b }}"
+    LINE "}"
+    LINE ""
+    LINE ""
+        ;
+
+    fuzz(expr);
+}
+
+void Fuzzing_139(void) {
+    // Implement testcase
+}
+
+void Fuzzing_142(void) {
+    // Implement testcase
+}
+
+void Fuzzing_143(void) {
+    // Implement testcase
+}
+
+void Fuzzing_148(void) {
+    // Implement testcase
 }

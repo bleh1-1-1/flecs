@@ -737,7 +737,13 @@
                 "check_regular_target_in_sparse_observer",
                 "check_regular_exclusive_target_in_sparse_observer",
                 "child_of_component_w_sparse",
-                "child_of_component_w_sparse_exclusive"
+                "child_of_component_w_sparse_exclusive",
+                "create_entity_in_on_remove",
+                "defer_add_two_sparse_w_observer",
+                "defer_remove_two_sparse_w_observer",
+                "defer_set_batch_two_sparse_w_observer",
+                "defer_set_w_sparse_w_observer",
+                "defer_ensure_modified_w_sparse_w_observer"
             ]
         }, {
             "id": "NonFragmentingChildOf",
@@ -1216,6 +1222,7 @@
                 "get_ref_after_delete_other",
                 "get_ref_after_delete_child",
                 "get_ref_after_clear",
+                "get_ref_after_clear_table",
                 "get_ref_after_clear_other",
                 "get_ref_after_realloc",
                 "get_ref_after_realloc_w_lifecycle",
@@ -1521,7 +1528,8 @@
                 "lookup_name_65_chars",
                 "lookup_path_63_chars",
                 "lookup_path_64_chars",
-                "lookup_path_65_chars"
+                "lookup_path_65_chars",
+                "lookup_malformed"
             ]
         }, {
             "id": "Singleton",
@@ -1558,7 +1566,11 @@
                 "tag_w_value",
                 "1_tag_1_component",
                 "1_tag_1_component_w_value",
-                "clone_w_name"
+                "clone_w_name",
+                "clone_component",
+                "clone_component_w_value",
+                "clone_component_w_entity",
+                "clone_component_w_entity_w_value"
             ]
         }, {
             "id": "ComponentLifecycle",
@@ -1840,7 +1852,8 @@
                 "value_pair_to_str",
                 "has_value_pair_wildcard",
                 "has_value_pair_any",
-                "target_w_value_pair"
+                "target_w_value_pair",
+                "inherit_relationship_trait"
             ]
         }, {
            "id": "Trigger",

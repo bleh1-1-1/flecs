@@ -182,6 +182,8 @@ void StructTypes_overlapping_value_error_range(void);
 void StructTypes_overlapping_value_warning_range(void);
 void StructTypes_struct_w_16_alignment(void);
 void StructTypes_struct_w_use_offset(void);
+void StructTypes_direct_cycle(void);
+void StructTypes_indirect_cycle(void);
 
 // Testsuite 'NestedStructTypes'
 void NestedStructTypes_1_bool(void);
@@ -230,6 +232,8 @@ void ArrayTypes_array_of_standaline_array_bool_1(void);
 void ArrayTypes_array_of_standaline_array_bool_2(void);
 void ArrayTypes_array_of_standaline_array_bool_3(void);
 void ArrayTypes_array_w_short_notation(void);
+void ArrayTypes_direct_cycle(void);
+void ArrayTypes_indirect_cycle(void);
 
 // Testsuite 'VectorTypes'
 void VectorTypes_vector_bool(void);
@@ -806,6 +810,7 @@ void SerializeIterToJson_serialize_type_info_1_component(void);
 void SerializeIterToJson_serialize_type_info_2_components(void);
 void SerializeIterToJson_serialize_type_info_1_struct(void);
 void SerializeIterToJson_serialize_type_info_1_component_1_struct(void);
+void SerializeIterToJson_serialize_type_info_1_component_1_pair_tag(void);
 void SerializeIterToJson_serialize_type_info_2_structs(void);
 void SerializeIterToJson_serialize_type_info_w_unit(void);
 void SerializeIterToJson_serialize_type_info_w_unit_quantity(void);
@@ -1830,6 +1835,14 @@ bake_test_case StructTypes_testcases[] = {
     {
         "struct_w_use_offset",
         StructTypes_struct_w_use_offset
+    },
+    {
+        "direct_cycle",
+        StructTypes_direct_cycle
+    },
+    {
+        "indirect_cycle",
+        StructTypes_indirect_cycle
     }
 };
 
@@ -2012,6 +2025,14 @@ bake_test_case ArrayTypes_testcases[] = {
     {
         "array_w_short_notation",
         ArrayTypes_array_w_short_notation
+    },
+    {
+        "direct_cycle",
+        ArrayTypes_direct_cycle
+    },
+    {
+        "indirect_cycle",
+        ArrayTypes_indirect_cycle
     }
 };
 
@@ -4278,6 +4299,10 @@ bake_test_case SerializeIterToJson_testcases[] = {
         SerializeIterToJson_serialize_type_info_1_component_1_struct
     },
     {
+        "serialize_type_info_1_component_1_pair_tag",
+        SerializeIterToJson_serialize_type_info_1_component_1_pair_tag
+    },
+    {
         "serialize_type_info_2_structs",
         SerializeIterToJson_serialize_type_info_2_structs
     },
@@ -5643,7 +5668,6 @@ bake_test_case RttCompare_testcases[] = {
     }
 };
 
-
 static bake_test_suite suites[] = {
     {
         "PrimitiveTypes",
@@ -5677,7 +5701,7 @@ static bake_test_suite suites[] = {
         "StructTypes",
         NULL,
         NULL,
-        32,
+        34,
         StructTypes_testcases
     },
     {
@@ -5691,7 +5715,7 @@ static bake_test_suite suites[] = {
         "ArrayTypes",
         NULL,
         NULL,
-        22,
+        24,
         ArrayTypes_testcases
     },
     {
@@ -5747,7 +5771,7 @@ static bake_test_suite suites[] = {
         "SerializeIterToJson",
         NULL,
         NULL,
-        82,
+        83,
         SerializeIterToJson_testcases
     },
     {
