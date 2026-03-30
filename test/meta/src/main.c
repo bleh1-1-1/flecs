@@ -184,6 +184,8 @@ void StructTypes_struct_w_16_alignment(void);
 void StructTypes_struct_w_use_offset(void);
 void StructTypes_direct_cycle(void);
 void StructTypes_indirect_cycle(void);
+void StructTypes_use_before_registering_reflection(void);
+void StructTypes_use_before_registering_reflection_w_hooks(void);
 
 // Testsuite 'NestedStructTypes'
 void NestedStructTypes_1_bool(void);
@@ -532,6 +534,8 @@ void DeserializeFromJson_struct_struct_i32_array_3(void);
 void DeserializeFromJson_struct_struct_i32_i32_array_3(void);
 void DeserializeFromJson_struct_w_array_type_i32_i32(void);
 void DeserializeFromJson_struct_w_2_array_type_i32_i32(void);
+void DeserializeFromJson_struct_w_array_member_i32(void);
+void DeserializeFromJson_struct_w_array_member_struct(void);
 void DeserializeFromJson_struct_w_nested_member_i32(void);
 void DeserializeFromJson_struct_w_2_nested_members_i32(void);
 void DeserializeFromJson_struct_w_nested_members_struct(void);
@@ -877,6 +881,8 @@ void SerializeIterToJson_serialize_children_w_parent_component(void);
 void SerializeIterToJson_serialize_children_w_parent_component_table(void);
 void SerializeIterToJson_serialize_children_w_tag_w_parent_component(void);
 void SerializeIterToJson_serialize_children_w_tag_w_parent_component_table(void);
+void SerializeIterToJson_serialize_childof_var_w_parent(void);
+void SerializeIterToJson_serialize_childof_wildcard_w_parent(void);
 
 // Testsuite 'SerializeIterToRowJson'
 void SerializeIterToRowJson_serialize_this_w_1_tag(void);
@@ -1843,6 +1849,14 @@ bake_test_case StructTypes_testcases[] = {
     {
         "indirect_cycle",
         StructTypes_indirect_cycle
+    },
+    {
+        "use_before_registering_reflection",
+        StructTypes_use_before_registering_reflection
+    },
+    {
+        "use_before_registering_reflection_w_hooks",
+        StructTypes_use_before_registering_reflection_w_hooks
     }
 };
 
@@ -3200,6 +3214,14 @@ bake_test_case DeserializeFromJson_testcases[] = {
     {
         "struct_w_2_array_type_i32_i32",
         DeserializeFromJson_struct_w_2_array_type_i32_i32
+    },
+    {
+        "struct_w_array_member_i32",
+        DeserializeFromJson_struct_w_array_member_i32
+    },
+    {
+        "struct_w_array_member_struct",
+        DeserializeFromJson_struct_w_array_member_struct
     },
     {
         "struct_w_nested_member_i32",
@@ -4565,6 +4587,14 @@ bake_test_case SerializeIterToJson_testcases[] = {
     {
         "serialize_children_w_tag_w_parent_component_table",
         SerializeIterToJson_serialize_children_w_tag_w_parent_component_table
+    },
+    {
+        "serialize_childof_var_w_parent",
+        SerializeIterToJson_serialize_childof_var_w_parent
+    },
+    {
+        "serialize_childof_wildcard_w_parent",
+        SerializeIterToJson_serialize_childof_wildcard_w_parent
     }
 };
 
@@ -5701,7 +5731,7 @@ static bake_test_suite suites[] = {
         "StructTypes",
         NULL,
         NULL,
-        34,
+        36,
         StructTypes_testcases
     },
     {
@@ -5750,7 +5780,7 @@ static bake_test_suite suites[] = {
         "DeserializeFromJson",
         NULL,
         NULL,
-        152,
+        154,
         DeserializeFromJson_testcases
     },
     {
@@ -5771,7 +5801,7 @@ static bake_test_suite suites[] = {
         "SerializeIterToJson",
         NULL,
         NULL,
-        83,
+        85,
         SerializeIterToJson_testcases
     },
     {

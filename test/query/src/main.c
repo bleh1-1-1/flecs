@@ -2320,6 +2320,8 @@ void DontFragment_this_written_sparse_recycled(void);
 void DontFragment_this_written_sparse_pair_recycled(void);
 void DontFragment_this_written_sparse_wildcard_pair_recycled(void);
 void DontFragment_this_written_sparse_any_pair_recycled(void);
+void DontFragment_this_written_not_sparse_wildcard_pair(void);
+void DontFragment_this_written_not_sparse_pair(void);
 
 // Testsuite 'NonFragmentingChildOf'
 void NonFragmentingChildOf_setup(void);
@@ -2424,6 +2426,8 @@ void NonFragmentingChildOf_this_src_childof_component_w_parent(void);
 void NonFragmentingChildOf_this_src_childof_component_w_parent_single_child(void);
 void NonFragmentingChildOf_this_src_childof_component_w_parent_single_child_table(void);
 void NonFragmentingChildOf_this_src_childof_wildcard(void);
+void NonFragmentingChildOf_this_src_childof_wildcard_count(void);
+void NonFragmentingChildOf_this_src_childof_var_count(void);
 void NonFragmentingChildOf_this_src_childof_wildcard_w_tag(void);
 void NonFragmentingChildOf_this_src_childof_wildcard_w_component(void);
 void NonFragmentingChildOf_this_src_childof_any(void);
@@ -11870,6 +11874,14 @@ bake_test_case DontFragment_testcases[] = {
     {
         "this_written_sparse_any_pair_recycled",
         DontFragment_this_written_sparse_any_pair_recycled
+    },
+    {
+        "this_written_not_sparse_wildcard_pair",
+        DontFragment_this_written_not_sparse_wildcard_pair
+    },
+    {
+        "this_written_not_sparse_pair",
+        DontFragment_this_written_not_sparse_pair
     }
 };
 
@@ -12277,6 +12289,14 @@ bake_test_case NonFragmentingChildOf_testcases[] = {
     {
         "this_src_childof_wildcard",
         NonFragmentingChildOf_this_src_childof_wildcard
+    },
+    {
+        "this_src_childof_wildcard_count",
+        NonFragmentingChildOf_this_src_childof_wildcard_count
+    },
+    {
+        "this_src_childof_var_count",
+        NonFragmentingChildOf_this_src_childof_var_count
     },
     {
         "this_src_childof_wildcard_w_tag",
@@ -13942,7 +13962,7 @@ static bake_test_suite suites[] = {
         "DontFragment",
         DontFragment_setup,
         NULL,
-        128,
+        130,
         DontFragment_testcases,
         1,
         DontFragment_params
@@ -13951,7 +13971,7 @@ static bake_test_suite suites[] = {
         "NonFragmentingChildOf",
         NonFragmentingChildOf_setup,
         NULL,
-        314,
+        316,
         NonFragmentingChildOf_testcases,
         1,
         NonFragmentingChildOf_params

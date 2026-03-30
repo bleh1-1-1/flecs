@@ -950,7 +950,6 @@ void NonFragmentingChildOf_delete_mixed_tree_2(void);
 void NonFragmentingChildOf_delete_mixed_tree_3(void);
 void NonFragmentingChildOf_delete_mixed_tree_4(void);
 void NonFragmentingChildOf_delete_mixed_tree_5(void);
-void NonFragmentingChildOf_instantiate_parent_w_has_in_hook(void);
 void NonFragmentingChildOf_add_prefab_tag_after_hierarchy_creation(void);
 void NonFragmentingChildOf_defer_add_prefab_tag_after_hierarchy_creation(void);
 void NonFragmentingChildOf_add_prefab_tag_after_hierarchy_creation_2(void);
@@ -1653,6 +1652,7 @@ void ComponentLifecycle_has_in_on_add_hook_new(void);
 void ComponentLifecycle_has_in_on_add_hook_move(void);
 void ComponentLifecycle_get_in_on_add_hook_new(void);
 void ComponentLifecycle_get_in_on_add_hook_move(void);
+void ComponentLifecycle_get_name_in_on_add_hook_move(void);
 
 // Testsuite 'Pairs'
 void Pairs_type_w_one_pair(void);
@@ -1790,6 +1790,9 @@ void Pairs_value_pair_to_str(void);
 void Pairs_has_value_pair_wildcard(void);
 void Pairs_has_value_pair_any(void);
 void Pairs_target_w_value_pair(void);
+void Pairs_add_value_pair_w_0_target(void);
+void Pairs_add_value_pair_w_0_target_w_isa(void);
+void Pairs_add_to_entity_w_value_pair_0_target_w_isa(void);
 void Pairs_inherit_relationship_trait(void);
 
 // Testsuite 'Trigger'
@@ -2056,6 +2059,10 @@ void Observer_propagate_remove_isa_of_parent(void);
 void Observer_propagate_add_childof_of_base(void);
 void Observer_propagate_remove_childof_of_base(void);
 void Observer_emit_for_parent_w_prefab_child_and_instance(void);
+void Observer_query_eval_w_component_that_triggered_observer(void);
+void Observer_query_eval_w_pair_first_var_that_triggered_observer(void);
+void Observer_query_eval_w_pair_second_var_that_triggered_observer(void);
+void Observer_query_eval_w_pair_both_vars_that_triggered_observer(void);
 void Observer_observer_w_2_fixed_src(void);
 void Observer_emit_for_recreated_id_after_remove_all(void);
 void Observer_emit_for_recreated_id_after_remove_all_wildcard(void);
@@ -2168,6 +2175,7 @@ void Observer_2_terms_on_set_yield_existing_is_set(void);
 void Observer_2_singleton_terms_on_add(void);
 void Observer_2_singleton_terms_on_remove(void);
 void Observer_2_singleton_terms_on_set(void);
+void Observer_on_set_singleton_set_component_named_entity(void);
 void Observer_1_term_field_size(void);
 void Observer_2_terms_field_size(void);
 void Observer_1_up_term_field_size(void);
@@ -6933,10 +6941,6 @@ bake_test_case NonFragmentingChildOf_testcases[] = {
         NonFragmentingChildOf_delete_mixed_tree_5
     },
     {
-        "instantiate_parent_w_has_in_hook",
-        NonFragmentingChildOf_instantiate_parent_w_has_in_hook
-    },
-    {
         "add_prefab_tag_after_hierarchy_creation",
         NonFragmentingChildOf_add_prefab_tag_after_hierarchy_creation
     },
@@ -9649,6 +9653,10 @@ bake_test_case ComponentLifecycle_testcases[] = {
     {
         "get_in_on_add_hook_move",
         ComponentLifecycle_get_in_on_add_hook_move
+    },
+    {
+        "get_name_in_on_add_hook_move",
+        ComponentLifecycle_get_name_in_on_add_hook_move
     }
 };
 
@@ -10192,6 +10200,18 @@ bake_test_case Pairs_testcases[] = {
     {
         "target_w_value_pair",
         Pairs_target_w_value_pair
+    },
+    {
+        "add_value_pair_w_0_target",
+        Pairs_add_value_pair_w_0_target
+    },
+    {
+        "add_value_pair_w_0_target_w_isa",
+        Pairs_add_value_pair_w_0_target_w_isa
+    },
+    {
+        "add_to_entity_w_value_pair_0_target_w_isa",
+        Pairs_add_to_entity_w_value_pair_0_target_w_isa
     },
     {
         "inherit_relationship_trait",
@@ -11248,6 +11268,22 @@ bake_test_case Observer_testcases[] = {
         Observer_emit_for_parent_w_prefab_child_and_instance
     },
     {
+        "query_eval_w_component_that_triggered_observer",
+        Observer_query_eval_w_component_that_triggered_observer
+    },
+    {
+        "query_eval_w_pair_first_var_that_triggered_observer",
+        Observer_query_eval_w_pair_first_var_that_triggered_observer
+    },
+    {
+        "query_eval_w_pair_second_var_that_triggered_observer",
+        Observer_query_eval_w_pair_second_var_that_triggered_observer
+    },
+    {
+        "query_eval_w_pair_both_vars_that_triggered_observer",
+        Observer_query_eval_w_pair_both_vars_that_triggered_observer
+    },
+    {
         "observer_w_2_fixed_src",
         Observer_observer_w_2_fixed_src
     },
@@ -11694,6 +11730,10 @@ bake_test_case Observer_testcases[] = {
     {
         "2_singleton_terms_on_set",
         Observer_2_singleton_terms_on_set
+    },
+    {
+        "on_set_singleton_set_component_named_entity",
+        Observer_on_set_singleton_set_component_named_entity
     },
     {
         "1_term_field_size",
@@ -15935,7 +15975,7 @@ static bake_test_suite suites[] = {
         "NonFragmentingChildOf",
         NULL,
         NULL,
-        239,
+        238,
         NonFragmentingChildOf_testcases
     },
     {
@@ -16033,14 +16073,14 @@ static bake_test_suite suites[] = {
         "ComponentLifecycle",
         ComponentLifecycle_setup,
         NULL,
-        138,
+        139,
         ComponentLifecycle_testcases
     },
     {
         "Pairs",
         NULL,
         NULL,
-        136,
+        139,
         Pairs_testcases
     },
     {
@@ -16054,7 +16094,7 @@ static bake_test_suite suites[] = {
         "Observer",
         NULL,
         NULL,
-        328,
+        333,
         Observer_testcases
     },
     {

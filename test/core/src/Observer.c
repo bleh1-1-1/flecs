@@ -2,6 +2,16 @@
 
 static ECS_COMPONENT_DECLARE(Position);
 static ECS_COMPONENT_DECLARE(Velocity);
+static ECS_COMPONENT_DECLARE(ReproMyComponent);
+static ECS_COMPONENT_DECLARE(ReproMySingletonComponent);
+
+typedef struct ReproMyComponent {
+    int v;
+} ReproMyComponent;
+
+typedef struct ReproMySingletonComponent {
+    int v;
+} ReproMySingletonComponent;
 
 static
 void Observer(ecs_iter_t *it) {
@@ -125,6 +135,28 @@ static bool dummy_called = false;
 static
 void Dummy(ecs_iter_t *it) {
     dummy_called = true;
+}
+
+typedef struct ObserverEventIdCtx {
+    ecs_entity_t entry_event;
+    ecs_id_t expected_id;
+    ecs_id_t next_id;
+    int32_t invoked;
+} ObserverEventIdCtx;
+
+static
+void ObserverOnEventId(ecs_iter_t *it) {
+    ObserverEventIdCtx *ctx = it->ctx;
+    test_int(it->count, 1);
+    test_int(it->ids[0], ctx->expected_id);
+    if (!ctx->invoked ++) {
+        ecs_add_id(it->world, it->entities[0], ctx->next_id);
+        ecs_enqueue(it->world, &(ecs_event_desc_t){
+            .event = ctx->entry_event,
+            .ids = &(ecs_type_t){ .count = 1, .array = (ecs_id_t[]){ ctx->next_id } },
+            .entity = it->entities[0]
+        });
+    }
 }
 
 void Observer_on_add_before_edge(void) {
@@ -6059,6 +6091,150 @@ void Observer_emit_for_parent_w_prefab_child_and_instance(void) {
     ecs_fini(world);
 }
 
+void Observer_query_eval_w_component_that_triggered_observer(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t entry_event = ecs_new(world);
+    ecs_entity_t sequence_shared = ecs_entity(world, { .name = "SequenceShared" });
+    ecs_add_id(world, sequence_shared, EcsTrait);
+    ecs_entity_t sequence = ecs_new_w_id(world, sequence_shared);
+    ecs_entity_t child = ecs_new(world);
+
+    ObserverEventIdCtx ctx = {
+        .entry_event = entry_event,
+        .expected_id = sequence,
+        .next_id = child
+    };
+
+    ecs_observer(world, {
+        .query.expr = "$Sequence, SequenceShared($Sequence)",
+        .events = { entry_event },
+        .callback = ObserverOnEventId,
+        .ctx = &ctx
+    });
+
+    ecs_enqueue(world, &(ecs_event_desc_t){
+        .event = entry_event,
+        .ids = &(ecs_type_t){ .count = 1, .array = (ecs_id_t[]){ sequence } },
+        .entity = ecs_new_w_id(world, sequence)
+    });
+
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Observer_query_eval_w_pair_first_var_that_triggered_observer(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t entry_event = ecs_new(world);
+    ecs_entity_t rel_tag = ecs_entity(world, { .name = "RelTag" });
+    ecs_entity_t rel = ecs_entity(world, { .name = "MatchRel" });
+    ecs_entity_t tgt = ecs_entity(world, { .name = "MatchTgt" });
+    ecs_entity_t other_rel = ecs_entity(world, { .name = "OtherRel" });
+    ecs_add_id(world, rel, rel_tag);
+
+    ObserverEventIdCtx ctx = {
+        .entry_event = entry_event,
+        .expected_id = ecs_pair(rel, tgt),
+        .next_id = ecs_pair(other_rel, tgt)
+    };
+
+    ecs_observer(world, {
+        .query.expr = "($Rel, MatchTgt), RelTag($Rel)",
+        .events = { entry_event },
+        .callback = ObserverOnEventId,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, rel, tgt);
+    ecs_enqueue(world, &(ecs_event_desc_t){
+        .event = entry_event,
+        .ids = &(ecs_type_t){ .count = 1, .array = (ecs_id_t[]){ ctx.expected_id } },
+        .entity = e
+    });
+
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Observer_query_eval_w_pair_second_var_that_triggered_observer(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t entry_event = ecs_new(world);
+    ecs_entity_t tgt_tag = ecs_entity(world, { .name = "TgtTag" });
+    ecs_entity_t rel = ecs_entity(world, { .name = "MatchRel" });
+    ecs_entity_t tgt = ecs_entity(world, { .name = "MatchTgt" });
+    ecs_entity_t other_tgt = ecs_entity(world, { .name = "OtherTgt" });
+    ecs_add_id(world, tgt, tgt_tag);
+
+    ObserverEventIdCtx ctx = {
+        .entry_event = entry_event,
+        .expected_id = ecs_pair(rel, tgt),
+        .next_id = ecs_pair(rel, other_tgt)
+    };
+
+    ecs_observer(world, {
+        .query.expr = "(MatchRel, $Tgt), TgtTag($Tgt)",
+        .events = { entry_event },
+        .callback = ObserverOnEventId,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, rel, tgt);
+    ecs_enqueue(world, &(ecs_event_desc_t){
+        .event = entry_event,
+        .ids = &(ecs_type_t){ .count = 1, .array = (ecs_id_t[]){ ctx.expected_id } },
+        .entity = e
+    });
+
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Observer_query_eval_w_pair_both_vars_that_triggered_observer(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t entry_event = ecs_new(world);
+    ecs_entity_t rel_tag = ecs_entity(world, { .name = "RelTag" });
+    ecs_entity_t tgt_tag = ecs_entity(world, { .name = "TgtTag" });
+    ecs_entity_t rel = ecs_entity(world, { .name = "MatchRel" });
+    ecs_entity_t tgt = ecs_entity(world, { .name = "MatchTgt" });
+    ecs_entity_t other_rel = ecs_entity(world, { .name = "OtherRel" });
+    ecs_entity_t other_tgt = ecs_entity(world, { .name = "OtherTgt" });
+    ecs_add_id(world, rel, rel_tag);
+    ecs_add_id(world, tgt, tgt_tag);
+
+    ObserverEventIdCtx ctx = {
+        .entry_event = entry_event,
+        .expected_id = ecs_pair(rel, tgt),
+        .next_id = ecs_pair(other_rel, other_tgt)
+    };
+
+    ecs_observer(world, {
+        .query.expr = "($Rel, $Tgt), RelTag($Rel), TgtTag($Tgt)",
+        .events = { entry_event },
+        .callback = ObserverOnEventId,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, rel, tgt);
+    ecs_enqueue(world, &(ecs_event_desc_t){
+        .event = entry_event,
+        .ids = &(ecs_type_t){ .count = 1, .array = (ecs_id_t[]){ ctx.expected_id } },
+        .entity = e
+    });
+
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
 void Observer_observer_w_2_fixed_src(void) {
     ecs_world_t *world = ecs_init();
 
@@ -10943,6 +11119,16 @@ static void SingletonObserver_w_value(ecs_iter_t *it) {
     is_singleton_observer_invoked ++;
 }
 
+static void SingletonSetComponentNamedEntityObserver(ecs_iter_t *it) {
+    test_int(it->count, 0);
+
+    ReproMySingletonComponent *c1 = ecs_field(it, ReproMySingletonComponent, 0);
+    test_assert(c1 != NULL);
+
+    ecs_entity_t a = ecs_entity(it->world, { .name = "A" });
+    ecs_set(it->world, a, ReproMyComponent, { c1->v });
+}
+
 void Observer_2_singleton_terms_on_add(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -11024,6 +11210,35 @@ void Observer_2_singleton_terms_on_set(void) {
     ecs_singleton_set(world, Velocity, {1, 2});
 
     test_int(is_singleton_observer_invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Observer_on_set_singleton_set_component_named_entity(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT_DEFINE(world, ReproMyComponent);
+    ECS_COMPONENT_DEFINE(world, ReproMySingletonComponent);
+
+    ecs_add_id(world, ecs_id(ReproMySingletonComponent), EcsSingleton);
+
+    ecs_observer(world, {
+        .query.terms = {
+            { ecs_id(ReproMySingletonComponent) },
+            { ecs_id(ReproMySingletonComponent), .src.id = EcsIsEntity, .inout = EcsOut }
+        },
+        .events = { EcsOnSet },
+        .callback = SingletonSetComponentNamedEntityObserver
+    });
+
+    ecs_singleton_set(world, ReproMySingletonComponent, {1});
+
+    ecs_entity_t a = ecs_lookup(world, "A");
+    test_assert(a != 0);
+
+    const ReproMyComponent *c = ecs_get(world, a, ReproMyComponent);
+    test_assert(c != NULL);
+    test_int(c->v, 1);
 
     ecs_fini(world);
 }

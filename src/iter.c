@@ -116,14 +116,21 @@ void* ecs_field_w_size(
     }
 
     const ecs_table_record_t *tr = it->trs[index];
+
+#ifdef FLECS_DEBUG  
+    ecs_component_record_t *cr = flecs_components_get(
+        it->real_world, it->ids[index]);
+    if (cr) {
+        ecs_assert(!(cr->flags & EcsIdSparse), ECS_INVALID_OPERATION,
+            "field %d: use ecs_field_at to access fields for sparse components", 
+            index);
+        }
+#endif
+
     if (!tr) {
         ecs_assert(!ecs_field_is_set(it, index), ECS_INTERNAL_ERROR, NULL);
         return NULL;
     }
-
-    ecs_assert(!(tr->hdr.cr->flags & EcsIdSparse), ECS_INVALID_OPERATION,
-        "field %d: use ecs_field_at to access fields for sparse components", 
-        index);
 
     ecs_entity_t src = it->sources[index];
     ecs_table_t *table;
@@ -918,8 +925,8 @@ ecs_iter_t ecs_worker_iter(
     ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_check(it->next != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_check(count > 0, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(index >= 0, ECS_INVALID_PARAMETER, 
-        "invalid field index %d", index);
+    ecs_check(index >= 0, ECS_INVALID_PARAMETER,
+        "invalid worker index %d", index);
     ecs_check(index < count, ECS_INVALID_PARAMETER, NULL);
 
     ecs_iter_t result = *it;

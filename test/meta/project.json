@@ -196,7 +196,9 @@
                 "struct_w_16_alignment",
                 "struct_w_use_offset",
                 "direct_cycle",
-                "indirect_cycle"
+                "indirect_cycle",
+                "use_before_registering_reflection",
+                "use_before_registering_reflection_w_hooks"
             ]
         }, {
             "id": "NestedStructTypes",
@@ -559,6 +561,8 @@
                 "struct_struct_i32_i32_array_3",
                 "struct_w_array_type_i32_i32",
                 "struct_w_2_array_type_i32_i32",
+                "struct_w_array_member_i32",
+                "struct_w_array_member_struct",
                 "struct_w_nested_member_i32",
                 "struct_w_2_nested_members_i32",
                 "struct_w_nested_members_struct",
@@ -909,7 +913,9 @@
                 "serialize_children_w_parent_component",
                 "serialize_children_w_parent_component_table",
                 "serialize_children_w_tag_w_parent_component",
-                "serialize_children_w_tag_w_parent_component_table"
+                "serialize_children_w_tag_w_parent_component_table",
+                "serialize_childof_var_w_parent",
+                "serialize_childof_wildcard_w_parent"
             ]
         }, {
             "id": "SerializeIterToRowJson",

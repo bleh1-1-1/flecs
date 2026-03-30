@@ -982,7 +982,6 @@
                 "delete_mixed_tree_3",
                 "delete_mixed_tree_4",
                 "delete_mixed_tree_5",
-                "instantiate_parent_w_has_in_hook",
                 "add_prefab_tag_after_hierarchy_creation",
                 "defer_add_prefab_tag_after_hierarchy_creation",
                 "add_prefab_tag_after_hierarchy_creation_2",
@@ -1713,7 +1712,8 @@
                 "has_in_on_add_hook_new",
                 "has_in_on_add_hook_move",
                 "get_in_on_add_hook_new",
-                "get_in_on_add_hook_move"
+                "get_in_on_add_hook_move",
+                "get_name_in_on_add_hook_move"
             ]
         }, {
             "id": "Pairs",
@@ -1853,6 +1853,9 @@
                 "has_value_pair_wildcard",
                 "has_value_pair_any",
                 "target_w_value_pair",
+                "add_value_pair_w_0_target",
+                "add_value_pair_w_0_target_w_isa",
+                "add_to_entity_w_value_pair_0_target_w_isa",
                 "inherit_relationship_trait"
             ]
         }, {
@@ -2123,6 +2126,10 @@
                 "propagate_add_childof_of_base",
                 "propagate_remove_childof_of_base",
                 "emit_for_parent_w_prefab_child_and_instance",
+                "query_eval_w_component_that_triggered_observer",
+                "query_eval_w_pair_first_var_that_triggered_observer",
+                "query_eval_w_pair_second_var_that_triggered_observer",
+                "query_eval_w_pair_both_vars_that_triggered_observer",
                 "observer_w_2_fixed_src",
                 "emit_for_recreated_id_after_remove_all",
                 "emit_for_recreated_id_after_remove_all_wildcard",
@@ -2235,6 +2242,7 @@
                 "2_singleton_terms_on_add",
                 "2_singleton_terms_on_remove",
                 "2_singleton_terms_on_set",
+                "on_set_singleton_set_component_named_entity",
                 "1_term_field_size",
                 "2_terms_field_size",
                 "1_up_term_field_size",

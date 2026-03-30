@@ -1089,6 +1089,7 @@ void Observer_on_add_singleton(void);
 void Observer_on_add_pair_singleton(void);
 void Observer_on_add_pair_wildcard_singleton(void);
 void Observer_on_add_with_pair_singleton(void);
+void Observer_on_set_singleton_set_component_named_entity(void);
 void Observer_add_in_yield_existing(void);
 void Observer_add_in_yield_existing_multi(void);
 void Observer_name_from_root(void);
@@ -1113,6 +1114,10 @@ void Observer_on_set_w_override_after_delete(void);
 void Observer_on_set_w_override_after_clear(void);
 void Observer_trigger_on_set_in_on_add_implicit_registration(void);
 void Observer_trigger_on_set_in_on_add_implicit_registration_namespaced(void);
+void Observer_query_eval_w_component_that_triggered_observer(void);
+void Observer_query_eval_w_pair_first_var_that_triggered_observer(void);
+void Observer_query_eval_w_pair_second_var_that_triggered_observer(void);
+void Observer_query_eval_w_pair_both_vars_that_triggered_observer(void);
 void Observer_fixed_src_w_each(void);
 void Observer_fixed_src_w_run(void);
 void Observer_untyped_field(void);
@@ -5873,6 +5878,10 @@ bake_test_case Observer_testcases[] = {
         Observer_on_add_with_pair_singleton
     },
     {
+        "on_set_singleton_set_component_named_entity",
+        Observer_on_set_singleton_set_component_named_entity
+    },
+    {
         "add_in_yield_existing",
         Observer_add_in_yield_existing
     },
@@ -5967,6 +5976,22 @@ bake_test_case Observer_testcases[] = {
     {
         "trigger_on_set_in_on_add_implicit_registration_namespaced",
         Observer_trigger_on_set_in_on_add_implicit_registration_namespaced
+    },
+    {
+        "query_eval_w_component_that_triggered_observer",
+        Observer_query_eval_w_component_that_triggered_observer
+    },
+    {
+        "query_eval_w_pair_first_var_that_triggered_observer",
+        Observer_query_eval_w_pair_first_var_that_triggered_observer
+    },
+    {
+        "query_eval_w_pair_second_var_that_triggered_observer",
+        Observer_query_eval_w_pair_second_var_that_triggered_observer
+    },
+    {
+        "query_eval_w_pair_both_vars_that_triggered_observer",
+        Observer_query_eval_w_pair_both_vars_that_triggered_observer
     },
     {
         "fixed_src_w_each",
@@ -8052,7 +8077,7 @@ static bake_test_suite suites[] = {
         "Observer",
         NULL,
         NULL,
-        64,
+        69,
         Observer_testcases
     },
     {
