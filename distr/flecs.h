@@ -114,6 +114,9 @@
 #ifndef FLECS_DEBUG_INFO
 #define FLECS_DEBUG_INFO
 #endif
+#ifndef FLECS_EXCLUSIVE_ACCESS
+#define FLECS_EXCLUSIVE_ACCESS /* Enable exclusive access checks in debug mode */
+#endif
 #endif
 
 /* Tip: if you see weird behavior that you think might be a bug, make sure to
@@ -224,6 +227,7 @@
 // #define FLECS_C           /**< C API convenience macros, always enabled. */
 #define FLECS_CPP            /**< C++ API. */
 #define FLECS_DOC            /**< Document entities and components. */
+// #define FLECS_EXCLUSIVE_ACCESS /**< Enable exclusive world access checks. */
 // #define FLECS_JOURNAL     /**< Journaling addon. */
 #define FLECS_JSON           /**< Parsing JSON to/from component values. */
 #define FLECS_HTTP           /**< Tiny HTTP server for connecting to remote UI. */
@@ -5275,27 +5279,27 @@ FLECS_API
 bool flecs_query_trivial_cached_next(
     ecs_iter_t *it);
 
-#ifdef FLECS_DEBUG
+#ifdef FLECS_EXCLUSIVE_ACCESS
 /** Check if the current thread has exclusive access to the world.
  * This operation checks if the current thread is allowed to access the world.
  * The operation is called by internal functions before mutating the world, and
  * will panic if the current thread does not have exclusive access to the world.
- * 
+ *
  * Exclusive access is controlled by the ecs_exclusive_access_begin() and
  * ecs_exclusive_access_end() operations.
- * 
+ *
  * This operation is public so that it shows up in stack traces, but code such
  * as language bindings or wrappers could also use it to verify that the world
  * is accessed from the correct thread.
- * 
+ *
  * @param world The world.
  */
 FLECS_API
 void flecs_check_exclusive_world_access_write(
     const ecs_world_t *world);
 
-/** Same as flecs_check_exclusive_world_access_write(), but for read access. 
- * 
+/** Same as flecs_check_exclusive_world_access_write(), but for read access.
+ *
  * @param world The world.
  */
 FLECS_API
@@ -6461,8 +6465,6 @@ typedef struct ecs_build_info_t {
 /** Type that contains information about the world. */
 typedef struct ecs_world_info_t {
     ecs_entity_t last_component_id;   /**< Last issued component entity ID. */
-    ecs_entity_t min_id;              /**< First allowed entity ID. */
-    ecs_entity_t max_id;              /**< Last allowed entity ID. */
 
     ecs_ftime_t delta_time_raw;       /**< Raw delta time (no time scaling). */
     ecs_ftime_t delta_time;           /**< Time passed to or computed by ecs_progress(). */
@@ -6527,6 +6529,16 @@ typedef struct ecs_query_group_info_t {
     int32_t table_count;  /**< Number of tables in group. */
     void *ctx;            /**< Group context, returned by on_group_create. */
 } ecs_query_group_info_t;
+
+/** Type that stores an entity id range.
+ * Returned by ecs_entity_range_new(), used with ecs_entity_range_set().
+ */
+typedef struct ecs_entity_range_t {
+    uint32_t min;           /**< First id in range (inclusive). */
+    uint32_t max;           /**< Last id in range (inclusive, 0 = unlimited). */
+    uint32_t cur;           /**< Last issued id in range. */
+    ecs_vec_t recycled;     /**< Recycled entity ids (vec<entity_t>). */
+} ecs_entity_range_t;
 
 /** @} */
 
@@ -7668,41 +7680,55 @@ FLECS_API
 void ecs_shrink(
     ecs_world_t *world);
 
-/** Set a range for issuing new entity IDs.
- * This function constrains the entity identifiers returned by ecs_new_w() to the
- * specified range. This operation can be used to ensure that multiple processes
- * can run in the same simulation without requiring a central service that
- * coordinates issuing identifiers.
+/** Create a new entity range.
+ * This function creates a range that constrains new entity identifiers returned 
+ * by the specified [min, max] interval. Each range maintains its own list of 
+ * recycled entity ids, which ensures that recycled ids always respect the 
+ * configured range. If `max` is set to 0, the range is unbounded.
  *
- * If `id_end` is set to 0, the range is infinite. If `id_end` is set to a non-zero
- * value, it has to be larger than `id_start`. If `id_end` is set and ecs_new() is
- * invoked after an ID is issued that is equal to `id_end`, the application will
- * abort.
+ * Entity ranges cannot be deleted once created. Use ecs_entity_range_set() to 
+ * activate a range.
  *
  * @param world The world.
- * @param id_start The start of the range.
- * @param id_end The end of the range.
+ * @param min The first entity id in the range (inclusive).
+ * @param max The last entity id in the range (inclusive, 0 = unlimited).
+ * @return A pointer to the new range. Does not need to be freed.
  */
 FLECS_API
-void ecs_set_entity_range(
+const ecs_entity_range_t* ecs_entity_range_new(
     ecs_world_t *world,
-    ecs_entity_t id_start,
-    ecs_entity_t id_end);
+    uint32_t min,
+    uint32_t max);
 
-/** Enable or disable range limits.
- * When an application is both a receiver of range-limited entities and a
- * producer of range-limited entities, range checking needs to be temporarily
- * disabled when inserting received entities. Range checking is disabled on a
- * stage, so setting this value is thread-safe.
+/** Set the active entity range.
+ * This function activates a range created with ecs_entity_range_new().
+ * When a range is activated, new entity identifiers will fall within the 
+ * specified [min, max] interval, including recycled identifiers.
+ *
+ * When the active range is out of available ids, operations that create new
+ * entity ids will assert.
+ * 
+ * The operation only accepts ranges that have been created by 
+ * ecs_entity_range_new().
  *
  * @param world The world.
- * @param enable True if range checking should be enabled, false to disable.
- * @return The previous value.
+ * @param range The range to activate.
  */
 FLECS_API
-bool ecs_enable_range_check(
+void ecs_entity_range_set(
     ecs_world_t *world,
-    bool enable);
+    const ecs_entity_range_t *range);
+
+/** Get the currently active entity id range.
+ * Returns the range set by ecs_entity_range_set(), or NULL if no range is
+ * active.
+ *
+ * @param world The world.
+ * @return The active range, or NULL.
+ */
+FLECS_API
+const ecs_entity_range_t* ecs_entity_range_get(
+    const ecs_world_t *world);
 
 /** Get the largest issued entity ID (not counting generation).
  *
@@ -7741,6 +7767,10 @@ typedef struct ecs_delete_empty_tables_desc_t {
 
     /** Amount of time operation is allowed to spend. */
     double time_budget_seconds;
+
+    /** Table index to start scanning at. The function loops around until it
+     * reaches this offset again, or until the time budget is exceeded. */
+    int32_t offset;
 } ecs_delete_empty_tables_desc_t;
 
 /** Clean up empty tables.
@@ -7768,9 +7798,15 @@ typedef struct ecs_delete_empty_tables_desc_t {
  *
  * The time budget specifies how long the operation should take at most.
  *
+ * The offset parameter specifies the table index at which to start scanning.
+ * The function loops around until it reaches this offset again, or until the
+ * time budget is exceeded.
+ *
  * @param world The world.
  * @param desc Configuration parameters.
- * @return The number of deleted tables.
+ * @return The index + 1 of the table where the function stopped, or 0 if the
+ *         function scanned all tables. The return value can be used as the
+ *         offset for the next call.
  */
 FLECS_API
 int32_t ecs_delete_empty_tables(
@@ -13084,6 +13120,16 @@ void ecs_parser_warningv_(
 #else
 #define ecs_dbg_assert(condition, error_code, ...)
 #endif
+
+/** Always assert.
+ * Assert that is always active, even in release builds. Always aborts on
+ * failure (does not support FLECS_SOFT_ASSERT). */
+#define ecs_always_assert(condition, error_code, ...)\
+    if (!(condition)) {\
+        ecs_assert_log_(error_code, #condition, __FILE__, __LINE__, __VA_ARGS__);\
+        ecs_os_abort();\
+    }\
+    assert(condition) /* satisfy compiler/static analyzers */
 
 /** Sanitize assert.
  * Assert that is only valid in sanitized mode (ignores FLECS_KEEP_ASSERT). */
@@ -25354,30 +25400,25 @@ struct world {
         ecs_dim(world_, entity_count);
     }
 
-    /** Set entity range.
-     * This function limits the range of issued entity IDs between min and max.
-     *
-     * @param min Minimum entity ID issued.
-     * @param max Maximum entity ID issued.
-     *
-     * @see ecs_set_entity_range()
+    /** Create a new entity id range.
+     * @see ecs_entity_range_new()
      */
-    void set_entity_range(entity_t min, entity_t max) const {
-        ecs_set_entity_range(world_, min, max);
+    const ecs_entity_range_t* range_new(uint32_t min, uint32_t max) const {
+        return ecs_entity_range_new(world_, min, max);
     }
 
-    /** Enforce that operations cannot modify entities outside of range.
-     * This function ensures that only entities within the specified range can
-     * be modified. Use this function if specific parts of the code only are
-     * allowed to modify a certain set of entities, as could be the case for
-     * networked applications.
-     *
-     * @param enabled True if range check should be enabled, false if not.
-     *
-     * @see ecs_enable_range_check()
+    /** Set the active entity id range.
+     * @see ecs_entity_range_set()
      */
-    void enable_range_check(bool enabled = true) const {
-        ecs_enable_range_check(world_, enabled);
+    void range_set(const ecs_entity_range_t *range) const {
+        ecs_entity_range_set(world_, range);
+    }
+
+    /** Get the currently active entity id range.
+     * @see ecs_entity_range_get()
+     */
+    const ecs_entity_range_t* range_get() const {
+        return ecs_entity_range_get(world_);
     }
 
     /** Set current scope.

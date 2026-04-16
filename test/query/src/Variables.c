@@ -11968,6 +11968,70 @@ void Variables_set_var_from_chained_iter(void) {
     ecs_fini(world);
 }
 
+void Variables_field_w_or_var_src_w_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+    ECS_TAG(world, Trait);
+
+    typedef struct { ecs_entity_t value; } CompRef;
+    ecs_entity_t ecs_id(CompRef) = ecs_component(world, {
+        .entity = ecs_entity(world, { .name = "CompRef" }),
+        .type.size = ECS_SIZEOF(CompRef),
+        .type.alignment = ECS_ALIGNOF(CompRef)
+    });
+
+    ecs_entity_t comp_a = ecs_entity(world, { .name = "CompA" });
+    ecs_set(world, comp_a, CompRef, { ecs_id(Position) });
+    ecs_add(world, comp_a, Trait);
+    ecs_set(world, comp_a, Position, {1, 2});
+
+    ecs_entity_t comp_b = ecs_entity(world, { .name = "CompB" });
+    ecs_set(world, comp_b, CompRef, { ecs_id(Velocity) });
+    ecs_add(world, comp_b, Trait);
+    ecs_add_pair(world, comp_b, comp_b, ecs_id(Velocity));
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "CompRef($Component), Trait($Component), "
+                "$Component || ($Component, *) || (*, $Component)",
+        .cache_kind = cache_kind
+    });
+
+    test_assert(q != NULL);
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    int match_count = 0;
+
+    while (ecs_query_next(&it)) {
+        CompRef *ref = ecs_field(&it, CompRef, 0);
+        for (int i = 0; i < it.count; i ++) {
+            ecs_id_t matched_id = ecs_field_id(&it, 2);
+            const ecs_type_info_t *ti = ecs_get_type_info(world, matched_id);
+            if (!ti) {
+                continue;
+            }
+
+            if (ti->component != ref[i].value) {
+                continue;
+            }
+
+            void *ptr = ecs_field_w_size(&it, ti->size, 2);
+            if (!ptr) {
+                continue;
+            }
+
+            match_count ++;
+        }
+    }
+
+    test_int(match_count, 1);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
 void Variables_set_var_range_from_chained_iter(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -12007,6 +12071,217 @@ void Variables_set_var_range_from_chained_iter(void) {
     test_bool(false, ecs_page_next(&pit));
 
     ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+static ecs_entity_t recycled_id(ecs_world_t *world, const char *name) {
+    ecs_entity_t result = ecs_new(world);
+    ecs_delete(world, result);
+    ecs_entity_t result_2 = ecs_new(world);
+    test_assert(result_2 != (uint32_t)result);
+    ecs_set_name(world, result_2, name);
+    return result_2;
+}
+
+void Variables_recycled_vars(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tag);
+    
+    ecs_entity_t src = recycled_id(world, "src");
+    ecs_entity_t rel = recycled_id(world, "rel");
+    ecs_add(world, src, Tag);
+    ecs_add_id(world, src, rel);
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "$x($y), Tag($y)",
+        .cache_kind = cache_kind
+    });
+
+    test_assert(r != NULL);
+
+    int32_t x_var = ecs_query_find_var(r, "x");
+    test_assert(x_var != -1);
+    int32_t y_var = ecs_query_find_var(r, "y");
+    test_assert(y_var != -1);
+
+    ecs_iter_t it = ecs_query_iter(world, r);
+    test_bool(true, ecs_query_next(&it));
+    test_uint(0, it.count);
+    test_uint(Tag, ecs_field_id(&it, 0));
+    test_uint(Tag, ecs_field_id(&it, 1));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(Tag, ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+
+    test_bool(true, ecs_query_next(&it));
+    test_uint(0, it.count);
+    test_uint(rel, ecs_field_id(&it, 0));
+    test_uint(Tag, ecs_field_id(&it, 1));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(rel, ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+
+    test_bool(false, ecs_query_next(&it));
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Variables_recycled_pair_vars(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tag);
+    
+    ecs_entity_t src = recycled_id(world, "src");
+    ecs_entity_t rel = recycled_id(world, "rel");
+    ecs_entity_t tgt = recycled_id(world, "tgt");
+    ecs_add(world, src, Tag);
+    ecs_add_pair(world, src, rel, tgt);
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "$x($y, $z), Tag($y)",
+        .cache_kind = cache_kind
+    });
+
+    test_assert(r != NULL);
+
+    int32_t x_var = ecs_query_find_var(r, "x");
+    test_assert(x_var != -1);
+    int32_t y_var = ecs_query_find_var(r, "y");
+    test_assert(y_var != -1);
+    int32_t z_var = ecs_query_find_var(r, "z");
+    test_assert(z_var != -1);
+
+    ecs_iter_t it = ecs_query_iter(world, r);
+    test_bool(true, ecs_query_next(&it));
+    test_uint(0, it.count);
+    test_uint(ecs_pair(ecs_id(EcsIdentifier), EcsName), ecs_field_id(&it, 0));
+    test_uint(Tag, ecs_field_id(&it, 1));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(ecs_id(EcsIdentifier), ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+    test_uint(EcsName, ecs_iter_get_var(&it, z_var));
+
+    test_bool(true, ecs_query_next(&it));
+    test_uint(0, it.count);
+    test_uint(ecs_pair(rel, tgt), ecs_field_id(&it, 0));
+    test_uint(Tag, ecs_field_id(&it, 1));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(rel, ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+    test_uint(tgt, ecs_iter_get_var(&it, z_var));
+
+    test_bool(false, ecs_query_next(&it));
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Variables_recycled_this_ent_var(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tag);
+    
+    ecs_entity_t src = recycled_id(world, "src");
+    ecs_entity_t rel = recycled_id(world, "rel");
+    ecs_entity_t tgt = recycled_id(world, "tgt");
+    ecs_add(world, src, Tag);
+    ecs_add_pair(world, src, rel, tgt);
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "$x($y, $this), Tag($y)",
+        .cache_kind = cache_kind
+    });
+
+    test_assert(r != NULL);
+
+    int32_t x_var = ecs_query_find_var(r, "x");
+    test_assert(x_var != -1);
+    int32_t y_var = ecs_query_find_var(r, "y");
+    test_assert(y_var != -1);
+    int32_t this_var = ecs_query_find_var(r, "this");
+    test_assert(this_var != -1);
+
+    ecs_iter_t it = ecs_query_iter(world, r);
+    test_bool(true, ecs_query_next(&it));
+    test_uint(1, it.count);
+    test_uint(ecs_pair(ecs_id(EcsIdentifier), EcsName), ecs_field_id(&it, 0));
+    test_uint(Tag, ecs_field_id(&it, 1));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(ecs_id(EcsIdentifier), ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+    test_uint(EcsName, ecs_iter_get_var(&it, this_var));
+    test_uint(EcsName, it.entities[0]);
+
+    test_bool(true, ecs_query_next(&it));
+    test_uint(1, it.count);
+    test_uint(ecs_pair(rel, tgt), ecs_field_id(&it, 0));
+    test_uint(Tag, ecs_field_id(&it, 1));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(rel, ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+    test_uint(tgt, ecs_iter_get_var(&it, this_var));
+    test_uint(tgt, it.entities[0]);
+
+    test_bool(false, ecs_query_next(&it));
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Variables_has_recycled_id_from_pair(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tag);
+    
+    ecs_entity_t src = recycled_id(world, "src");
+    ecs_entity_t rel = recycled_id(world, "rel");
+    ecs_entity_t tgt = recycled_id(world, "tgt");
+    ecs_add_pair(world, src, rel, tgt);
+    ecs_add_id(world, src, tgt);
+    ecs_add(world, src, Tag);
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "$x($y, $z), $z($y), Tag($y)",
+        .cache_kind = cache_kind
+    });
+
+    test_assert(r != NULL);
+
+    int32_t x_var = ecs_query_find_var(r, "x");
+    test_assert(x_var != -1);
+    int32_t y_var = ecs_query_find_var(r, "y");
+    test_assert(y_var != -1);
+    int32_t z_var = ecs_query_find_var(r, "z");
+    test_assert(z_var != -1);
+
+    ecs_iter_t it = ecs_query_iter(world, r);
+    test_bool(true, ecs_query_next(&it));
+    test_uint(0, it.count);
+    test_uint(ecs_pair(rel, tgt), ecs_field_id(&it, 0));
+    test_uint(tgt, ecs_field_id(&it, 1));
+    test_uint(Tag, ecs_field_id(&it, 2));
+    test_uint(src, ecs_field_src(&it, 0));
+    test_uint(src, ecs_field_src(&it, 1));
+    test_uint(src, ecs_field_src(&it, 2));
+    test_uint(rel, ecs_iter_get_var(&it, x_var));
+    test_uint(src, ecs_iter_get_var(&it, y_var));
+    test_uint(tgt, ecs_iter_get_var(&it, z_var));
+
+    test_bool(false, ecs_query_next(&it));
+
+    ecs_query_fini(r);
 
     ecs_fini(world);
 }
